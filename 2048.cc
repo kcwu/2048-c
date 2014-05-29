@@ -196,6 +196,37 @@ float eval(board_t b) {
   return score;
 }
 
+inline uint64_t rotl64 ( uint64_t x, int8_t r ) {
+  return (x << r) | (x >> (64 - r));
+}
+
+inline uint64_t fmix ( uint64_t k ) {
+  k ^= k >> 33;
+  k *= 0xff51afd7ed558ccdull;
+  k ^= k >> 33;
+  k *= 0xc4ceb9fe1a85ec53ull;
+  k ^= k >> 33;
+  return k;
+}
+
+inline uint64_t murmur128_64_to_32(uint64_t x) {
+  uint64_t seed = 0;
+  uint64_t h1 = seed;
+  uint64_t h2 = seed;
+  uint64_t c1 = 0x87c37b91114253d5ull;
+  uint64_t c2 = 0x4cf5ad432745937full;
+  uint64_t k1 = x;
+
+  k1 *= c1; k1  = rotl64(k1,31); k1 *= c2; h1 ^= k1;
+  h1 ^= 8; h2 ^= 8;
+  h1 += h2;
+  h2 += h1;
+  h1 = fmix(h1);
+  h2 = fmix(h2);
+  h1 += h2;
+  return h1;
+}
+
 float search_min(board_t b, int depth, float nodep);
 float search_max(board_t b, int depth, float nodep) {
   float best_score = -1e10;
@@ -212,10 +243,8 @@ float search_max(board_t b, int depth, float nodep) {
 
 #include <tr1/unordered_map>
 typedef std::tr1::unordered_map<board_t, float> trans_table_t;
-typedef std::tr1::unordered_map<board_t, char> trans_table2_t;
 
 trans_table_t cache1;
-trans_table2_t cache2;
 
 float search_min(board_t b, int depth, float nodep) {
   if (depth == 0 || nodep < search_threshold)
@@ -245,6 +274,33 @@ float search_min(board_t b, int depth, float nodep) {
   return result;
 }
 
+struct cache2_value_t {
+  board_t b;
+};
+#define CACHE2_KEY_SIZE 65536
+cache2_value_t cache2[CACHE2_KEY_SIZE];
+
+inline int cache2_key_hash(board_t b) {
+  return murmur128_64_to_32(b) % CACHE2_KEY_SIZE;
+}
+
+inline void cache2_set(board_t b, int depth) {
+  int key = cache2_key_hash(b);
+  cache2_value_t& value = cache2[key];
+  value.b = (b & ~0xff) | depth;
+}
+
+inline bool cache2_get(board_t b, int depth) {
+  int key = cache2_key_hash(b);
+  cache2_value_t& value = cache2[key];
+  if ((value.b >> 8) == (b >> 8))
+    return (value.b & 0xff) >= unsigned(depth);
+  return false;
+}
+
+void cache2_clear() {
+}
+
 bool maybe_dead_maxnode(board_t b, int depth);
 bool maybe_dead_minnode(board_t b, int depth) {
   if (depth <= 0)
@@ -253,9 +309,8 @@ bool maybe_dead_minnode(board_t b, int depth) {
   int blank = count_blank(b);
   if (blank >= depth+1) return false;
 
-  const trans_table2_t::iterator& it = cache2.find(b);
-  if (it != cache2.end())
-    return it->second;
+  if (cache2_get(b, depth))
+    return false;
 
   board_t tmp = b;
   board_t tile_2 = 1;
@@ -270,7 +325,7 @@ bool maybe_dead_minnode(board_t b, int depth) {
     tile_2 <<= 4;
   }
 
-  cache2[b] = false;
+  cache2_set(b, depth);
   return false;
 }
 
@@ -294,7 +349,7 @@ int root_search_move(board_t b) {
 
   int badmove[4] = {0};
   int nbadmove = 0;
-  cache2.clear();
+  cache2_clear();
 #if 1
   for(int m = 0; m < 4; m++) {
     board_t b2 = do_move(b, m);

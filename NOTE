@@ -8,9 +8,20 @@ Xeon E5420 2.5G
 support: MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, Intel 64, XD bit (an NX bit implementation), Intel VT-x, Demand-Based Switching except E5405, L5408; EIST except E5405
 L2 Cache: 2*6 MB
 --------------
+g++ 4.2.2 -O2	median 174148, avg 220392.0, 15.72ms/move, weighted 14.52ms/move
+clang++ 3.3 -O3	median 174788, avg 231017.0, 9.56ms/move, weighted 8.89ms/move
+g++ 4.4.7 -O2	median 174788, avg 231017.0, 9.44ms/move, weighted 8.61ms/move
+g++ 4.6.3 -O2	median 174788, avg 231017.0, 9.21ms/move, weighted 8.41ms/move
+g++ 4.4.7 -O3	median 174788, avg 231017.0, 8.78ms/move, weighted 7.99ms/move
+g++ 4.6.3 -O3	median 174788, avg 231017.0, 8.69ms/move, weighted 7.87ms/move
+-O3 -static	median 174788, avg 231017.0, 8.53ms/move, weighted 7.75ms/move
+-Ofast -static	median 180216, avg 226866.0, 8.49ms/move, weighted 8.06ms/move
+profiling	median 180216, avg 226866.0, 8.63ms/move, weighted 8.09ms/move
+--------------
 30 runs
 [59260, 79868, 80064, 81592, 126840, 130164, 130964, 135380, 146232, 150796, 151712, 154740, 164116, 166120, 170904, 174692, 174784, 179512, 180504, 180636, 294924, 347776, 368964, 372888, 383992, 391400, 392416, 540680, 618656, 629652]
 [7.0, 7.0, 7.2, 7.4, 7.9, 8.0, 8.0, 8.1, 8.1, 8.3, 8.5, 9.0, 9.3, 9.5, 10.0, 10.3, 10.5, 10.6, 10.7, 10.9, 10.9, 11.2, 11.2, 11.3, 11.4, 11.4, 11.7, 11.9, 11.9, 12.4]
 rank [100.0, 100.0, 86.7, 33.3, 10.0]
 median 174692, avg 222030.0, 9.72ms/move, weighted 8.80ms/move
+
 
