@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 #include <algorithm>
 
 #define N 4
@@ -20,7 +21,9 @@
 typedef uint64_t board_t;
 typedef uint16_t row_t;
 
+// globals
 FILE* log_fp = NULL;
+int flag_verbose;
 
 // ---------------------------------------------------------
 // parameters
@@ -596,11 +599,13 @@ void main_loop() {
     }
     move_count++;
     b = random_tile(b2, &num_tile4);
-    printf("step %d, move %c, score=%d\n",
-        move_count, move_str[m],
-        calculate_game_score(b, num_tile4));
+    if (flag_verbose) {
+      printf("step %d, move %c, score=%d\n",
+          move_count, move_str[m],
+          calculate_game_score(b, num_tile4));
+      print_pretty_board(b);
+    }
 #if 0
-    //print_pretty_board(b);
     print_board(b);
     printf("\n");
     printf("\n");
@@ -616,8 +621,20 @@ void main_loop() {
 }
 
 int main(int argc, char* argv[]) {
-  if (argc == 2)
-    my_random_seed = atoi(argv[1]);
+  int opt;
+  while ((opt = getopt(argc, argv, "vs:")) != -1) {
+    switch (opt) {
+      case 'v':
+        flag_verbose = 1;
+        break;
+      case 's':
+        my_random_seed = atoi(optarg);
+        break;
+      default: /* '?' */
+        printf("unknown option '%c'\n", opt);
+        break;
+    }
+  }
 
   init();
 

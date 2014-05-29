@@ -7,7 +7,7 @@ import os
 
 def func(idx):
     t0 = time.time()
-    p = subprocess.Popen(['./2048', str(idx+2000)], stdout=subprocess.PIPE)
+    p = subprocess.Popen(['./2048', '-s', str(idx+2000)], stdout=subprocess.PIPE)
     lines = []
 
     if 0:
