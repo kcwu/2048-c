@@ -293,7 +293,8 @@ int root_search_move(board_t b) {
   cache2.clear();
 #if 1
   for(int m = 0; m < 4; m++) {
-    if (maybe_dead_minnode(do_move(b, m), 12)) {
+    board_t b2 = do_move(b, m);
+    if (b == b2 || maybe_dead_minnode(b2, 12)) {
       badmove[m] = 1;
       nbadmove++;
     }
