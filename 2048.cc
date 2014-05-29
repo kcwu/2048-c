@@ -28,7 +28,26 @@ int max_lookaheads[] = {  // TODO fine tune
   4, 4, 4, 4,
 };
 
-float search_threshold = 0.006f;
+float search_threshold = 0.000f;
+
+enum enum_parameters {
+	PARAM_STILLALIVE,
+	PARAM_FREECELL,
+	PARAM_CENTEROFMASS1,
+	PARAM_CENTEROFMASS2,
+	PARAM_CENTEROFMASS3,
+	PARAM_CENTEROFMASS4,
+	PARAM_COUNT
+};
+
+int parameters[] ={
+  9500,
+  52,
+  21,
+  150,
+  188,
+  80,
+};
 
 // ---------------------------------------------------------
 // Utility functions for testing and debugging
@@ -81,6 +100,7 @@ row_t row_right_table[ROW_NUM];
 float my_score_table_L[65536];
 float my_score_table_R[65536];
 row_t diff_table[65536];
+float specialized_table[65536];
 
 inline ALWAYS_INLINE board_t transpose(board_t x) {
   board_t t;
@@ -181,6 +201,7 @@ float eval_smoothness(board_t b) {
   return -s;
 }
 
+#if 0
 float eval(board_t b) {
   float score = 0;
 
@@ -191,6 +212,26 @@ float eval(board_t b) {
 
   return score;
 }
+#else
+
+float eval(board_t b) {
+  float score = parameters[PARAM_STILLALIVE];
+  int blank = count_blank(b);
+  int freecell = parameters[PARAM_FREECELL];
+  while (blank && freecell) {
+    score += freecell;
+    freecell >>= 1;
+    blank--;
+  }
+
+  board_t t = transpose(b);
+  score += 
+    (
+      abs(apply_score_table(b, specialized_table)) +
+      abs(apply_score_table(t, specialized_table))) / (1<<10);
+  return score;
+}
+#endif
 
 float search_min(board_t b, int depth, float nodep);
 float search_max(board_t b, int depth, float nodep) {
@@ -419,6 +460,21 @@ void build_eval_table() {
       my_score_table_R[row] = R;
     }
 #endif
+    {
+      int w = 0;
+      for (int i = 0; i < 4; i++) {
+        int value = urow[i];
+
+        if (value == 0)
+          continue;
+        int weight3 = value * parameters[PARAM_CENTEROFMASS4];
+        int weight2 = value * (parameters[PARAM_CENTEROFMASS3] + weight3);
+        int weight1 = value * (parameters[PARAM_CENTEROFMASS2] + weight2);
+        int weight0 = value * (parameters[PARAM_CENTEROFMASS1] + weight1);
+        w += ((int) (i * 2) - (4 - 1)) * weight0;
+      }
+      specialized_table[row] = w;
+    }
 
 #if 1
     {
