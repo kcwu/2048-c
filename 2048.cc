@@ -8,6 +8,9 @@
 #define ROW_NUM 65536
 #define ROW_MASK 0xffffll
 
+//#define LOG_MOVES
+//#define REPLAY_MOVES
+
 #if 0
 #define ALWAYS_INLINE __attribute__((always_inline))
 #else
@@ -17,6 +20,7 @@
 typedef uint64_t board_t;
 typedef uint16_t row_t;
 
+FILE* log_fp = NULL;
 
 // ---------------------------------------------------------
 // parameters
@@ -501,15 +505,35 @@ int find_max_tile(board_t b) {
 }
 
 void main_loop() {
+  char log_filename[1024];
+  sprintf(log_filename, "log/%d.txt", my_random_seed);
+
   board_t b = 0;
   int num_tile4 = 0;
   b = random_tile(b, &num_tile4);
   b = random_tile(b, &num_tile4);
 
+#if defined(REPLAY_MOVES)
+  log_fp = fopen(log_filename, "r");
+#elif defined(LOG_MOVES)
+  log_fp = fopen(log_filename, "w");
+#endif
+
   int move_count = 0;
   print_pretty_board(b);
   while (is_can_move(b)) {
-    int m = root_search_move(b);
+    int m = 0;
+#if defined(REPLAY_MOVES)
+    if (!log_fp || fscanf(log_fp, "move %d\n", &m) != 1) {
+      printf("bad replay\n");
+      break;
+    }
+#elif defined(LOG_MOVES)
+    m = root_search_move(b);
+    if (log_fp) fprintf(log_fp, "move %d\n", m);
+#else
+    m = root_search_move(b);
+#endif
     board_t b2 = do_move(b, m);
     if (b == b2) {
       printf("bad move\n");
@@ -531,6 +555,9 @@ void main_loop() {
       calculate_game_score(b, num_tile4),
       move_count,
       find_max_tile(b));
+#if defined(REPLAY_MOVES) || defined(LOG_MOVES)
+  fclose(log_fp);
+#endif
 }
 
 int main(int argc, char* argv[]) {
