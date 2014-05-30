@@ -287,14 +287,12 @@ inline int cache2_key_hash(board_t b) {
   return murmur128_64_to_32(b) % CACHE2_KEY_SIZE;
 }
 
-inline void cache2_set(board_t b, int depth) {
-  int key = cache2_key_hash(b);
+inline void cache2_set(int key, board_t b, int depth) {
   cache2_value_t& value = cache2[key];
   value.b = (b & ~0xff) | depth;
 }
 
-inline bool cache2_get(board_t b, int depth) {
-  int key = cache2_key_hash(b);
+inline bool cache2_get(int key, board_t b, int depth) {
   cache2_value_t& value = cache2[key];
   if ((value.b >> 8) == (b >> 8))
     return (value.b & 0xff) >= unsigned(depth);
@@ -312,7 +310,8 @@ bool maybe_dead_minnode(board_t b, int depth) {
   int blank = count_blank(b);
   if (blank >= depth+1) return false;
 
-  if (cache2_get(b, depth))
+  int key = cache2_key_hash(b);
+  if (cache2_get(key, b, depth))
     return false;
 
   board_t tmp = b;
@@ -320,7 +319,6 @@ bool maybe_dead_minnode(board_t b, int depth) {
   while (tile_2) {
     if ((tmp & 0xf) == 0) {
       if (maybe_dead_maxnode(b | tile_2, depth)) {
-  //cache2[b] = true;
         return true;
       }
     }
@@ -328,7 +326,7 @@ bool maybe_dead_minnode(board_t b, int depth) {
     tile_2 <<= 4;
   }
 
-  cache2_set(b, depth);
+  cache2_set(key, b, depth);
   return false;
 }
 
