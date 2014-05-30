@@ -244,36 +244,67 @@ float search_max(board_t b, int depth, float nodep) {
   return best_score;
 }
 
-#include <tr1/unordered_map>
-typedef std::tr1::unordered_map<board_t, float> trans_table_t;
+struct cache1_value_t {
+  board_t b;
+  float s;
+  float p;
+};
 
-trans_table_t cache1;
+// cache1 size: 50%=2957, 99%=6427%, 99.9%=7621, max=9355
+#define CACHE1_KEY_SIZE 65536
+cache1_value_t cache1[CACHE1_KEY_SIZE];
+inline int cache1_key_hash(board_t b) {
+  return murmur128_64_to_32(b) % CACHE1_KEY_SIZE;
+}
+
+inline void cache1_set(int key, board_t b, int depth, float nodep, float s) {
+  cache1_value_t& value = cache1[key];
+  value.b = (b & ~0xff) | depth;
+  value.s = s;
+  value.p = nodep;
+}
+
+inline bool cache1_get(int key, board_t b, int depth, float nodep, float* s) {
+  cache1_value_t& value = cache1[key];
+  if ((value.b >> 8) == (b >> 8) &&
+    (value.b & 0xff) >= unsigned(depth) &&
+    // not sure to enable or not
+    //value.p >= nodep &&
+    1) {
+    *s = value.s;
+    return true;
+  }
+  return false;
+}
+
+void cache1_clear() {
+}
 
 float search_min(board_t b, int depth, float nodep) {
   if (depth == 0 || nodep < search_threshold)
     return eval(b);
 
-  {
-    if (cache1.find(b) != cache1.end())
-      return cache1[b];
-  }
+  int key = cache1_key_hash(b);
+  float s;
+  if (cache1_get(key, b, depth, nodep, &s))
+    return s;
 
   int blank = count_blank(b);
-  nodep /= blank;
+  float nodep2 = nodep / blank;
 
   float score = 0;
   board_t tile = 1;
   board_t tmp = b;
   while (tile) {
     if ((tmp & 0xf) == 0) {
-      score += search_max(b | tile, depth, nodep*0.9f) * 0.9f;
-      score += search_max(b | tile << 1, depth, nodep*0.1f) * 0.1f;
+      score += search_max(b | tile, depth, nodep2*0.9f) * 0.9f;
+      score += search_max(b | tile << 1, depth, nodep2*0.1f) * 0.1f;
     }
     tile <<= 4;
     tmp >>= 4;
   }
   float result = score / blank;
-  cache1[b] = result;
+  cache1_set(key, b, depth, nodep, result);
   return result;
 }
 
@@ -344,7 +375,7 @@ bool maybe_dead_maxnode(board_t b, int depth) {
 
 char move_str[] = "RLUD";
 int root_search_move(board_t b) {
-  cache1.clear();
+  cache1_clear();
   float best_score = -1e10-1;
   int best_move = 0;
 
