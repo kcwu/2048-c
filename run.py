@@ -4,10 +4,25 @@ import re
 import time
 import sys
 import os
+import json
+import hashlib
+
+def md5(s):
+    m = hashlib.md5()
+    m.update(s)
+    return m.hexdigest()
 
 def func(idx):
+    cmd = ['./2048', '-s', str(idx+2000)]
+
+    exe_md5 = md5(file('2048', 'rb').read())
+    cmd_md5 = md5(json.dumps(cmd))
+    cache_fn = 'cache/%s/%s' % (exe_md5, cmd_md5)
+    if os.path.exists(cache_fn):
+        return json.load(file(cache_fn))
+
     t0 = time.time()
-    p = subprocess.Popen(['./2048', '-s', str(idx+2000)], stdout=subprocess.PIPE)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     lines = []
 
     if 0:
@@ -37,13 +52,22 @@ def func(idx):
             r'final score=(\d+), moves=(\d+), max tile=(\d+)',
             lines[-1])
     assert m
-    
+
     score = int(m.group(1))
     moves = int(m.group(2))
     maxtile = int(m.group(3))
-    print (t1-t0), moves, (t1-t0)/moves, score, maxtile
+    result = (t1-t0), moves, (t1-t0)/moves, score, maxtile
+    print idx, result
 
-    return t1-t0, moves, (t1-t0)/moves, score, maxtile
+    try:
+        os.mkdir('cache/%s' % exe_md5)
+    except OSError:
+        pass
+    with file(cache_fn, 'w') as f:
+        json.dump(result, f)
+
+    return result
+
 
 def count_ranks(ranks):
     def larger(x):
@@ -83,7 +107,7 @@ def main():
     if len(scores) > 5:
         scores = scores[2:-2] # remove low 2 and high 2
     print 'median %d, avg %.1f, %.2fms/move, weighted %.2fms/move' % (
-            scores[len(scores)/2], 
+            scores[len(scores)/2],
             sum(scores)/len(scores),
             1000.*sum(ts) / len(ts),
             1000.*sum(totaltime) / sum(moves),
