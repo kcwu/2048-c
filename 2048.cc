@@ -37,6 +37,7 @@ int max_lookaheads[] = {  // TODO fine tune
 };
 
 float search_threshold = 0.006f;
+int maybe_dead_threshold = 12;
 
 // ---------------------------------------------------------
 // Utility functions for testing and debugging
@@ -386,7 +387,7 @@ int root_search_move(board_t b) {
 #if 1
   for(int m = 0; m < 4; m++) {
     board_t b2 = do_move(b, t, m);
-    if (b == b2 || maybe_dead_minnode(b2, 12)) {
+    if (b == b2 || maybe_dead_minnode(b2, maybe_dead_threshold)) {
       badmove[m] = 1;
       nbadmove++;
     }
@@ -657,13 +658,22 @@ void main_loop() {
 
 int main(int argc, char* argv[]) {
   int opt;
-  while ((opt = getopt(argc, argv, "vs:")) != -1) {
+  while ((opt = getopt(argc, argv, "vs:p:")) != -1) {
     switch (opt) {
       case 'v':
         flag_verbose = 1;
         break;
       case 's':
         my_random_seed = atoi(optarg);
+        break;
+      case 'p':
+        if (sscanf(optarg, "%d,%f,%d",
+            &max_lookahead,
+            &search_threshold,
+            &maybe_dead_threshold) != 3) {
+          printf("bad arg -p %s", optarg);
+          return -1;
+        }
         break;
       default: /* '?' */
         printf("unknown option '%c'\n", opt);
