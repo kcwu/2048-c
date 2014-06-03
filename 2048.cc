@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
 #include <algorithm>
 
 #define N 4
@@ -87,7 +88,7 @@ row_t row_left_table[ROW_NUM];
 row_t row_right_table[ROW_NUM];
 float my_score_table_L[65536];
 float my_score_table_R[65536];
-row_t diff_table[65536];
+uint16_t diff_table[65536][4];
 
 inline ALWAYS_INLINE board_t transpose(board_t x) {
   board_t t;
@@ -159,30 +160,28 @@ inline float eval_monotone(board_t b, board_t t) {
     return LR + UD;
 }
 
-inline float eval_smoothness(board_t b, board_t t) {
-  board_t LR = 
-    board_t(diff_table[(b >> 0) & ROW_MASK]) << 0 |
-    board_t(diff_table[(b >> 16) & ROW_MASK]) << 16 |
-    board_t(diff_table[(b >> 32) & ROW_MASK]) << 32 |
-    board_t(diff_table[(b >> 48) & ROW_MASK]) << 48;
+static inline void copy_row_to_col(const uint16_t a[4], uint16_t b[16]) {
+  b[0] = a[0];
+  b[4] = a[1];
+  b[8] = a[2];
+  b[12] = a[3];
+}
 
-  board_t UD = 
-    board_t(diff_table[(t >> 0) & ROW_MASK]) << 0 |
-    board_t(diff_table[(t >> 16) & ROW_MASK]) << 16 |
-    board_t(diff_table[(t >> 32) & ROW_MASK]) << 32 |
-    board_t(diff_table[(t >> 48) & ROW_MASK]) << 48;
-  UD = transpose(UD);
+inline float eval_smoothness(board_t b, board_t t) {
+  uint16_t diff_LR[16];
+  memcpy(diff_LR+0, diff_table[(b >> 0) & ROW_MASK], sizeof(diff_table[0]));
+  memcpy(diff_LR+4, diff_table[(b >> 16) & ROW_MASK], sizeof(diff_table[0]));
+  memcpy(diff_LR+8, diff_table[(b >> 32) & ROW_MASK], sizeof(diff_table[0]));
+  memcpy(diff_LR+12, diff_table[(b >> 48) & ROW_MASK], sizeof(diff_table[0]));
+  uint16_t diff_UD[16];
+  copy_row_to_col(diff_table[(t >> 0) & ROW_MASK], diff_UD+0);
+  copy_row_to_col(diff_table[(t >> 16) & ROW_MASK], diff_UD+1);
+  copy_row_to_col(diff_table[(t >> 32) & ROW_MASK], diff_UD+2);
+  copy_row_to_col(diff_table[(t >> 48) & ROW_MASK], diff_UD+3);
 
   int s = 0;
-  board_t x = b;
-  for (int i = 0; i < 16; i++) {
-    int p = abs((1<<(UD&0xf)) - (1<<(x&0xf)));
-    int q = abs((1<<(LR&0xf)) - (1<<(x&0xf)));
-    s += std::min(p, q);
-    UD >>= 4;
-    LR >>= 4;
-    x >>= 4;
-  }
+  for (int i = 0; i < 16; i++)
+    s += std::min(diff_LR[i], diff_UD[i]);
   return -s;
 }
 
@@ -518,14 +517,14 @@ void build_eval_table() {
     {
       int d[4];
       int x[4] = { 1 << urow[0], 1<<urow[1], 1<<urow[2], 1<<urow[3]};
-      d[0] = urow[1];
-      d[1] = abs(x[0]-x[1])<abs(x[2]-x[1])?urow[0]:urow[2];
-      d[2] = abs(x[1]-x[2])<abs(x[3]-x[2])?urow[1]:urow[3];
-      d[3] = urow[2];
-      diff_table[row] = d[0] << 0 |
-        d[1] << 4 |
-        d[2] << 8 |
-        d[3] << 12;
+      d[0] = abs(x[1]-x[0]);
+      d[1] = std::min(abs(x[0]-x[1]),abs(x[2]-x[1]));
+      d[2] = std::min(abs(x[1]-x[2]),abs(x[3]-x[2]));
+      d[3] = abs(x[2]-x[3]);
+      diff_table[row][0] = d[0];
+      diff_table[row][1] = d[1];
+      diff_table[row][2] = d[2];
+      diff_table[row][3] = d[3];
     }
 #endif
   }
