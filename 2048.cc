@@ -149,25 +149,23 @@ float apply_score_table(board_t b, float* table) {
     table[(b >> 48) & ROW_MASK];
 }
 
-float eval_monotone(board_t b) {
+inline float eval_monotone(board_t b, board_t t) {
     float LR = std::max(
         apply_score_table(b, my_score_table_L),
         apply_score_table(b, my_score_table_R));
-    board_t t = transpose(b);
     float UD = std::max(
         apply_score_table(t, my_score_table_L),
         apply_score_table(t, my_score_table_R));
     return LR + UD;
 }
 
-float eval_smoothness(board_t b) {
+inline float eval_smoothness(board_t b, board_t t) {
   board_t LR = 
     board_t(diff_table[(b >> 0) & ROW_MASK]) << 0 |
     board_t(diff_table[(b >> 16) & ROW_MASK]) << 16 |
     board_t(diff_table[(b >> 32) & ROW_MASK]) << 32 |
     board_t(diff_table[(b >> 48) & ROW_MASK]) << 48;
 
-  board_t t = transpose(b);
   board_t UD = 
     board_t(diff_table[(t >> 0) & ROW_MASK]) << 0 |
     board_t(diff_table[(t >> 16) & ROW_MASK]) << 16 |
@@ -189,12 +187,13 @@ float eval_smoothness(board_t b) {
 }
 
 float eval(board_t b) {
+  board_t t = transpose(b);
   float score = 0;
 
   int fill = 16 - count_blank(b);
   score += - fill*fill;
-  score += eval_smoothness(b);
-  score += eval_monotone(b);
+  score += eval_smoothness(b, t);
+  score += eval_monotone(b, t);
 
   return score;
 }
