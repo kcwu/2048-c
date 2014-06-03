@@ -596,6 +596,7 @@ int find_max_tile(board_t b) {
 }
 
 void main_loop() {
+  double t0 = now();
   char log_filename[1024];
   sprintf(log_filename, "log/%d.txt", my_random_seed);
 
@@ -611,7 +612,8 @@ void main_loop() {
 #endif
 
   int move_count = 0;
-  print_pretty_board(b);
+  if (flag_verbose)
+    print_pretty_board(b);
   while (is_can_move(b)) {
     int m = 0;
 #if defined(REPLAY_MOVES)
@@ -644,7 +646,9 @@ void main_loop() {
     printf("\n");
 #endif
   }
-  printf("final score=%d, moves=%d, max tile=%d\n",
+  double t1 = now();
+  printf("time=%f, final score=%d, moves=%d, max tile=%d\n",
+      t1-t0,
       calculate_game_score(b, num_tile4),
       move_count,
       find_max_tile(b));

@@ -6,22 +6,17 @@ import sys
 import os
 import json
 import hashlib
+import urllib2
+import base64
+
+free_server = multiprocessing.Queue()
 
 def md5(s):
     m = hashlib.md5()
     m.update(s)
     return m.hexdigest()
 
-def func(idx):
-    cmd = ['./2048', '-s', str(idx+2000)]
-
-    exe_md5 = md5(file('2048', 'rb').read())
-    cmd_md5 = md5(json.dumps(cmd))
-    cache_fn = 'cache/%s/%s' % (exe_md5, cmd_md5)
-    if os.path.exists(cache_fn):
-        return json.load(file(cache_fn))
-
-    t0 = time.time()
+def run(server, exe, arg):
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     lines = []
 
@@ -47,15 +42,40 @@ def func(idx):
             lines = lastlines.splitlines()
             #lines.append(line)
     p.wait()
-    t1 = time.time()
+    return lines
+
+def run(server, exe, arg):
+    url = 'http://%s/run' % server
+    data = json.dumps([base64.b64encode(exe), arg])
+    r = urllib2.urlopen(url, data=data)
+    result = json.loads(r.read())
+    print result
+    assert result['done'] == 'ok'
+    return result['output'].splitlines()
+
+def func(idx):
+    cmd = ['./2048', '-s', str(idx+2000)]
+
+    exe = file('2048', 'rb').read()
+    exe_md5 = md5(exe)
+    cmd_md5 = md5(json.dumps(cmd))
+    cache_fn = 'cache/%s/%s' % (exe_md5, cmd_md5)
+    if os.path.exists(cache_fn):
+        return json.load(file(cache_fn))
+
+    server = free_server.get()
+    arg = cmd[1:]
+    lines = run(server, exe, arg)
     m = re.match(
-            r'final score=(\d+), moves=(\d+), max tile=(\d+)',
+            r'time=(\d+\.\d+), final score=(\d+), moves=(\d+), max tile=(\d+)',
             lines[-1])
     assert m
 
-    score = int(m.group(1))
-    moves = int(m.group(2))
-    maxtile = int(m.group(3))
+    t0 = 0
+    t1 = float(m.group(1))
+    score = int(m.group(2))
+    moves = int(m.group(3))
+    maxtile = int(m.group(4))
     result = (t1-t0), moves, (t1-t0)/moves, score, maxtile
     print idx, result
 
@@ -66,6 +86,8 @@ def func(idx):
     with file(cache_fn, 'w') as f:
         json.dump(result, f)
 
+    free_server.put(server)
+
     return result
 
 
@@ -74,16 +96,36 @@ def count_ranks(ranks):
         return 1.0*len([r for r in ranks if r >= x]) / len(ranks)
     return larger(11), larger(12), larger(13), larger(14), larger(15)
 
+server_lists = [
+        'localhost:8765',
+        ]
+
+def query_servers():
+    result = []
+    for s in server_lists:
+        r = urllib2.urlopen('http://%s/config' % s)
+        x = r.read()
+        print s, int(x)
+        result += [s] * int(x)
+    return result
+
 def main():
     ncpu = 30
+    for s in query_servers():
+        free_server.put(s)
+    ncpu = free_server.qsize()
+    print 'total cpu', ncpu
+
     njob = ncpu
     if sys.argv[1:]:
         njob = int(sys.argv[1])
+
+    jobs = range(njob)
     if njob == 1 or ncpu == 1:
-        result = map(func, range(njob))
+        result = map(func, jobs)
     else:
         pool = multiprocessing.Pool(processes=ncpu)
-        result = pool.map(func, range(njob))
+        result = pool.map(func, jobs)
 
     totaltime = []
     moves = []
