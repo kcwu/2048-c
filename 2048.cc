@@ -123,20 +123,20 @@ inline ALWAYS_INLINE board_t do_move_1(board_t b) {
     (board_t)row_right_table[b >> 48 & ROW_MASK] << 48;
 }
 
-inline ALWAYS_INLINE board_t do_move_2(board_t b) {
-  return transpose(do_move_0(transpose(b)));
+inline ALWAYS_INLINE board_t do_move_2(board_t b, board_t t) {
+  return transpose(do_move_0(t));
 }
 
-inline ALWAYS_INLINE board_t do_move_3(board_t b) {
-  return transpose(do_move_1(transpose(b)));
+inline ALWAYS_INLINE board_t do_move_3(board_t b, board_t t) {
+  return transpose(do_move_1(t));
 }
 
-inline ALWAYS_INLINE board_t do_move(board_t b, int m) {
+inline ALWAYS_INLINE board_t do_move(board_t b, board_t t, int m) {
   switch (m) {
     case 0: return do_move_0(b);
     case 1: return do_move_1(b);
-    case 2: return do_move_2(b);
-    case 3: return do_move_3(b);
+    case 2: return do_move_2(b, t);
+    case 3: return do_move_3(b, t);
   }
   return 0;
 }
@@ -233,8 +233,9 @@ inline uint64_t murmur128_64_to_32(uint64_t x) {
 float search_min(board_t b, int depth, float nodep);
 float search_max(board_t b, int depth, float nodep) {
   float best_score = -1e10;
+  board_t t = transpose(b);
   for (int m = 0; m < 4; m++) {
-    board_t b2 = do_move(b, m);
+    board_t b2 = do_move(b, t, m);
     if (b == b2)
       continue;
     float s = search_min(b2, depth - 1, nodep);
@@ -362,8 +363,9 @@ bool maybe_dead_minnode(board_t b, int depth) {
 }
 
 bool maybe_dead_maxnode(board_t b, int depth) {
+  board_t t = transpose(b);
   for(int m = 0; m < 4; m++) {
-    board_t b2 = do_move(b, m);
+    board_t b2 = do_move(b, t, m);
     if (b2 == b)
       continue;
 
@@ -382,9 +384,10 @@ int root_search_move(board_t b) {
   int badmove[4] = {0};
   int nbadmove = 0;
   cache2_clear();
+  board_t t = transpose(b);
 #if 1
   for(int m = 0; m < 4; m++) {
-    board_t b2 = do_move(b, m);
+    board_t b2 = do_move(b, t, m);
     if (b == b2 || maybe_dead_minnode(b2, 12)) {
       badmove[m] = 1;
       nbadmove++;
@@ -396,7 +399,7 @@ int root_search_move(board_t b) {
     if (nbadmove != 4 && badmove[m])
       continue;
 
-    board_t b2 = do_move(b, m);
+    board_t b2 = do_move(b, t, m);
     if (b == b2)
       continue;
 
@@ -575,8 +578,9 @@ board_t random_tile(board_t b, int* num_tile4) {
 }
 
 bool is_can_move(board_t b) {
+  board_t t = transpose(b);
   for (int m = 0; m < 4; m++) {
-    if (b != do_move(b, m))
+    if (b != do_move(b, t, m))
       return true;
   }
   return false;
@@ -621,7 +625,7 @@ void main_loop() {
 #else
     m = root_search_move(b);
 #endif
-    board_t b2 = do_move(b, m);
+    board_t b2 = do_move(b, transpose(b), m);
     if (b == b2) {
       printf("bad move\n");
       break;
