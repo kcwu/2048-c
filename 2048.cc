@@ -311,6 +311,7 @@ float search_min(board_t b, int depth, float nodep) {
 struct cache2_value_t {
   board_t b;
 };
+// With depth_to_dead_of_blank heuristic, 64k is enough for maybe_dead_threshold=24
 #define CACHE2_KEY_SIZE 65536
 cache2_value_t cache2[CACHE2_KEY_SIZE];
 
@@ -333,13 +334,28 @@ inline bool cache2_get(int key, board_t b, int depth) {
 void cache2_clear() {
 }
 
+// data collected from 1200 runs
+int depth_to_dead_of_blank[17] = {
+  0,
+  1, 2, 3, 6,
+};
+
 bool maybe_dead_maxnode(board_t b, int depth);
 bool maybe_dead_minnode(board_t b, int depth) {
   if (depth <= 0)
     return false;
 
   int blank = count_blank(b);
+#if 1
+  // experimental data
+  if (blank >= 5)
+    return false;
+  if (depth_to_dead_of_blank[blank] > depth)
+    return false;
+#else
+  // theoretical bound
   if (blank >= depth+1) return false;
+#endif
 
   int key = cache2_key_hash(b);
   if (cache2_get(key, b, depth))
