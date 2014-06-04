@@ -1,4 +1,5 @@
 import multiprocessing
+import multiprocessing.dummy
 import subprocess
 import re
 import time
@@ -10,6 +11,7 @@ import urllib2
 import base64
 
 free_server = multiprocessing.Queue()
+extra_args = []
 
 def md5(s):
     m = hashlib.md5()
@@ -49,15 +51,15 @@ def run(server, exe, arg):
     data = json.dumps([base64.b64encode(exe), arg])
     r = urllib2.urlopen(url, data=data)
     result = json.loads(r.read())
-    print result
+    #print result
     assert result['done'] == 'ok'
     return result['output'].splitlines()
 
-def func(idx):
-    cmd = ['./2048', '-s', str(idx+2000)]
+def func((exe, exe_md5, idx)):
+    cmd = ['./2048', '-s', str(idx+2000)] + extra_args
 
-    exe = file('2048', 'rb').read()
-    exe_md5 = md5(exe)
+    #exe = file('2048', 'rb').read()
+    #exe_md5 = md5(exe)
     cmd_md5 = md5(json.dumps(cmd))
     cache_fn = 'cache/%s/%s' % (exe_md5, cmd_md5)
     if os.path.exists(cache_fn):
@@ -98,7 +100,7 @@ def count_ranks(ranks):
 
 server_lists = [
         'localhost:8765',
-        ]
+        ] + re.findall(r'[^,]+', os.environ.get('SERVER_2048', ''))
 
 def query_servers():
     result = []
@@ -109,22 +111,21 @@ def query_servers():
         result += [s] * int(x)
     return result
 
-def main():
-    ncpu = 30
+def init():
     for s in query_servers():
         free_server.put(s)
     ncpu = free_server.qsize()
     print 'total cpu', ncpu
 
-    njob = ncpu
-    if sys.argv[1:]:
-        njob = int(sys.argv[1])
-
-    jobs = range(njob)
+def run_jobs(njob):
+    ncpu = free_server.qsize()
+    exe = file('2048', 'rb').read()
+    exe_md5 = md5(exe)
+    jobs = [(exe,exe_md5,i) for i in range(njob)]
     if njob == 1 or ncpu == 1:
         result = map(func, jobs)
     else:
-        pool = multiprocessing.Pool(processes=ncpu)
+        pool = multiprocessing.dummy.Pool(processes=ncpu)
         result = pool.map(func, jobs)
 
     totaltime = []
@@ -144,10 +145,10 @@ def main():
     ranks.sort()
 
     print scores
-    print [round(t*1000,1) for t in ts]
+    #print [round(t*1000,1) for t in ts]
     print 'rank', [round(p*100, 1) for p in count_ranks(ranks)]
-    if len(scores) > 5:
-        scores = scores[2:-2] # remove low 2 and high 2
+    #if len(scores) > 5:
+    #    scores = scores[2:-2] # remove low 2 and high 2
     print 'median %d, avg %.1f, %.2fms/move, weighted %.2fms/move' % (
             scores[len(scores)/2],
             sum(scores)/len(scores),
@@ -155,5 +156,14 @@ def main():
             1000.*sum(totaltime) / sum(moves),
             )
 
+def main():
+    init()
+    ncpu = free_server.qsize()
+    njob = ncpu
+    if sys.argv[1:]:
+        njob = int(sys.argv[1])
+    run_jobs(njob)
 
-main()
+
+if __name__ == '__main__':
+    main()
