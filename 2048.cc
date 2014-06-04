@@ -28,7 +28,7 @@ int flag_verbose;
 
 // ---------------------------------------------------------
 // parameters
-int max_lookahead = 6;
+int max_lookahead = 7;
 int max_lookaheads[] = {  // TODO fine tune
   6, 6, 6, 6,
   6, 6, 5, 5,
@@ -37,7 +37,7 @@ int max_lookaheads[] = {  // TODO fine tune
 };
 
 float search_threshold = 0.006f;
-int maybe_dead_threshold = 12;
+int maybe_dead_threshold = 20;
 
 // ---------------------------------------------------------
 // Utility functions for testing and debugging
