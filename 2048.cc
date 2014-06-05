@@ -36,7 +36,7 @@ int max_lookaheads[] = {  // TODO fine tune
   4, 4, 4, 4,
 };
 
-float search_threshold = 0.006f;
+float search_threshold = 0.6f;
 int maybe_dead_threshold = 20;
 
 // ---------------------------------------------------------
@@ -290,15 +290,19 @@ float search_min(board_t b, int depth, float nodep) {
     return s;
 
   int blank = count_blank(b);
-  float nodep2 = nodep / blank;
+  float nodep2 = nodep;
 
   float score = 0;
   board_t tile = 1;
   board_t tmp = b;
   while (tile) {
     if ((tmp & 0xf) == 0) {
-      score += search_max(b | tile, depth, nodep2*0.9f) * 0.9f;
-      score += search_max(b | tile << 1, depth, nodep2*0.1f) * 0.1f;
+      if (nodep2 > 0.8) {
+        score += search_max(b | tile, depth, nodep2*0.9f) * 0.9f;
+        score += search_max(b | tile << 1, depth, nodep2*0.1f) * 0.1f;
+      } else {
+        score += search_max(b | tile, depth, nodep2*0.9f) * 0.9f;
+      }
     }
     tile <<= 4;
     tmp >>= 4;
