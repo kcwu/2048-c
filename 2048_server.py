@@ -46,6 +46,10 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     self.wfile.write(str(c))
             return
 
+        if self.path == '/killall':
+            subprocess.check_output(['killall', '-r', '2048.*'])
+            return
+
     def do_POST(self):
         #print self.path
         if self.path == '/run':
