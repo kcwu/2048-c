@@ -301,7 +301,7 @@ float search_min(board_t b, int depth, float nodep) {
         score += search_max(b | tile, depth, nodep2*0.9f) * 0.9f;
         score += search_max(b | tile << 1, depth, nodep2*0.1f) * 0.1f;
       } else {
-        score += search_max(b | tile, depth, nodep2*0.9f) * 0.9f;
+        score += search_max(b | tile, depth, nodep2*0.9f);
       }
     }
     tile <<= 4;
