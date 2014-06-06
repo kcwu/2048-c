@@ -28,7 +28,7 @@ int flag_verbose;
 
 // ---------------------------------------------------------
 // parameters
-int max_lookahead = 7;
+int max_lookahead = 6;
 int max_lookaheads[] = {  // TODO fine tune
   6, 6, 6, 6,
   6, 6, 5, 5,
@@ -229,15 +229,15 @@ inline uint64_t murmur128_64_to_32(uint64_t x) {
   return h1;
 }
 
-float search_min(board_t b, int depth, float nodep);
-float search_max(board_t b, int depth, float nodep) {
+float search_min(board_t b, int depth, int n2, int n4);
+float search_max(board_t b, int depth, int n2, int n4) {
   float best_score = -1e10;
   board_t t = transpose(b);
   for (int m = 0; m < 4; m++) {
     board_t b2 = do_move(b, t, m);
     if (b == b2)
       continue;
-    float s = search_min(b2, depth - 1, nodep);
+    float s = search_min(b2, depth - 1, n2, n4);
     if (s > best_score)
       best_score = s;
   }
@@ -280,35 +280,34 @@ inline bool cache1_get(int key, board_t b, int depth, float nodep, float* s) {
 void cache1_clear() {
 }
 
-float search_min(board_t b, int depth, float nodep) {
-  if (depth == 0 || nodep < search_threshold)
+float search_min(board_t b, int depth, int n2, int n4) {
+  if (depth == 0 || (n4 > 0 || n2 > 4))
     return eval(b);
 
   int key = cache1_key_hash(b);
   float s;
-  if (cache1_get(key, b, depth, nodep, &s))
+  if (cache1_get(key, b, depth, 0, &s))
     return s;
 
   int blank = count_blank(b);
-  float nodep2 = nodep;
 
   float score = 0;
   board_t tile = 1;
   board_t tmp = b;
   while (tile) {
     if ((tmp & 0xf) == 0) {
-      if (nodep2 > 0.8) {
-        score += search_max(b | tile, depth, nodep2*0.9f) * 0.9f;
-        score += search_max(b | tile << 1, depth, nodep2*0.1f) * 0.1f;
+      if (n4 == 0 && n2 <= 2) {
+        score += search_max(b | tile, depth, n2+1, n4) * 0.9f;
+        score += search_max(b | tile << 1, depth, n2, n4+1) * 0.1f;
       } else {
-        score += search_max(b | tile, depth, nodep2*0.9f);
+        score += search_max(b | tile, depth, n2+1, n4);
       }
     }
     tile <<= 4;
     tmp >>= 4;
   }
   float result = score / blank;
-  cache1_set(key, b, depth, nodep, result);
+  cache1_set(key, b, depth, 0, result);
   return result;
 }
 
@@ -424,7 +423,7 @@ int root_search_move(board_t b) {
 
     int lookahead = max_lookahead;
     //lookahead = max_lookaheads[count_blank(b2)];
-    float s = search_min(b2, lookahead - 1, 1.0f);
+    float s = search_min(b2, lookahead - 1, 0, 0);
     if (s > best_score) {
       best_score = s;
       best_move = m;
