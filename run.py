@@ -9,6 +9,7 @@ import json
 import hashlib
 import urllib2
 import base64
+import random
 
 free_server = multiprocessing.Queue()
 extra_args = []
@@ -109,6 +110,7 @@ def query_servers():
         x = r.read()
         print s, int(x)
         result += [s] * int(x)
+    random.shuffle(result)
     return result
 
 def init():
