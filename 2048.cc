@@ -229,15 +229,55 @@ inline uint64_t murmur128_64_to_32(uint64_t x) {
   return h1;
 }
 
+struct local_cache1_value_t {
+  board_t b;
+  float s;
+};
+
+local_cache1_value_t local_cache1[16 /*max depth*/][/*key*/32][4];
+
+inline int local_cache1_key(int tileidx, int tilev, int m) {
+  if (m < 2)
+    return tileidx / 4 + tilev * 4 + m * 8;
+  else
+    return tileidx % 4 + tilev * 4 + m * 8;
+}
+
+inline int local_cache1_get(int depth, int key, board_t b, float* s) {
+  for (int i = 0; i < 4; i++)
+    if (local_cache1[depth][key][i].b == b) {
+      *s = local_cache1[depth][key][i].s;
+      return true;
+    }
+  return false;
+}
+
+inline void local_cache1_set(int depth, int key, int tileidx, int m, board_t b, float s) {
+  if (m < 2) {
+    local_cache1[depth][key][tileidx % 4].b = b;
+    local_cache1[depth][key][tileidx % 4].s = s;
+  } else {
+    local_cache1[depth][key][tileidx / 4].b = b;
+    local_cache1[depth][key][tileidx / 4].s = s;
+  }
+}
+
 float search_min(board_t b, int depth, int n2, int n4);
-float search_max(board_t b, int depth, int n2, int n4) {
+float search_max(board_t b, int depth, int tileidx, int tilev, int n2, int n4) {
   float best_score = -1e10;
   board_t t = transpose(b);
   for (int m = 0; m < 4; m++) {
     board_t b2 = do_move(b, t, m);
     if (b == b2)
       continue;
-    float s = search_min(b2, depth - 1, n2, n4);
+    int key = local_cache1_key(tileidx, tilev, m);
+
+    float s;
+    if (!local_cache1_get(depth, key, b2, &s)) {
+      s = search_min(b2, depth - 1, n2, n4);
+      local_cache1_set(depth, key, tileidx, m, b2, s);
+    }
+
     if (s > best_score)
       best_score = s;
   }
@@ -290,17 +330,19 @@ float search_min(board_t b, int depth, int n2, int n4) {
   float score = 0;
   board_t tile = 1;
   board_t tmp = b;
+  int idx = 0;
   while (tile) {
     if ((tmp & 0xf) == 0) {
       if (n4 == 0 && n2 <= 2) {
-        score += search_max(b | tile, depth, n2+1, n4) * 0.9f;
-        score += search_max(b | tile << 1, depth, n2, n4+1) * 0.1f;
+        score += search_max(b | tile, depth, idx, 0, n2+1, n4) * 0.9f;
+        score += search_max(b | tile << 1, depth, idx, 1, n2, n4+1) * 0.1f;
       } else {
-        score += search_max(b | tile, depth, n2+1, n4);
+        score += search_max(b | tile, depth, idx, 0, n2+1, n4);
       }
     }
     tile <<= 4;
     tmp >>= 4;
+    idx++;
   }
   float result = score / blank;
   cache1_set(key, b, depth, result);
