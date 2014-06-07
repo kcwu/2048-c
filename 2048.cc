@@ -205,31 +205,13 @@ inline uint64_t rotl64 ( uint64_t x, int8_t r ) {
   return (x << r) | (x >> (64 - r));
 }
 
-inline uint64_t fmix ( uint64_t k ) {
-  k ^= k >> 33;
-  k *= 0xff51afd7ed558ccdull;
-  k ^= k >> 33;
-  k *= 0xc4ceb9fe1a85ec53ull;
-  k ^= k >> 33;
-  return k;
-}
-
-inline uint64_t murmur128_64_to_32(uint64_t x) {
-  uint64_t seed = 0;
-  uint64_t h1 = seed;
-  uint64_t h2 = seed;
-  uint64_t c1 = 0x87c37b91114253d5ull;
-  uint64_t c2 = 0x4cf5ad432745937full;
-  uint64_t k1 = x;
-
-  k1 *= c1; k1  = rotl64(k1,31); k1 *= c2; h1 ^= k1;
-  h1 ^= 8; h2 ^= 8;
-  h1 += h2;
-  h2 += h1;
-  h1 = fmix(h1);
-  h2 = fmix(h2);
-  h1 += h2;
-  return h1;
+// simplified from MurmurHash3_x64_128's fmix
+inline uint32_t murmur3_simplified(uint64_t x) {
+  x *= 0xff51afd7ed558ccdull;
+  x ^= x >> 33;
+  x *= 0xc4ceb9fe1a85ec53ull;
+  x ^= x >> 33;
+  return x;
 }
 
 int find_max_tile(board_t b) {
@@ -306,7 +288,7 @@ struct cache1_value_t {
 #define CACHE1_KEY_SIZE 65536
 cache1_value_t cache1[CACHE1_KEY_SIZE];
 inline int cache1_key_hash(board_t b) {
-  return murmur128_64_to_32(b) % CACHE1_KEY_SIZE;
+  return murmur3_simplified(b) % CACHE1_KEY_SIZE;
 }
 
 inline void cache1_set(int key, board_t b, int depth, float nodep, float s) {
@@ -376,7 +358,7 @@ struct cache2_value_t {
 cache2_value_t cache2[CACHE2_KEY_SIZE];
 
 inline int cache2_key_hash(board_t b) {
-  return murmur128_64_to_32(b) % CACHE2_KEY_SIZE;
+  return murmur3_simplified(b) % CACHE2_KEY_SIZE;
 }
 
 inline void cache2_set(int key, board_t b, int depth) {
@@ -701,7 +683,7 @@ void main_loop() {
       break;
     }
     move_count++;
-    my_random_seed ^= murmur128_64_to_32(b);
+    my_random_seed ^= murmur3_simplified(b);
     b = random_tile(b2, &num_tile4);
     if (flag_verbose) {
       printf("step %d, move %c, score=%d\n",
