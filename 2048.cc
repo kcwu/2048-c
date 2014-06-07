@@ -298,6 +298,7 @@ float search_max(board_t b, int depth, int tileidx, int tilev, float nodep /*, i
 
 struct cache1_value_t {
   board_t b;
+  float p;
   float s;
 };
 
@@ -308,16 +309,18 @@ inline int cache1_key_hash(board_t b) {
   return murmur128_64_to_32(b) % CACHE1_KEY_SIZE;
 }
 
-inline void cache1_set(int key, board_t b, int depth, float s) {
+inline void cache1_set(int key, board_t b, int depth, float nodep, float s) {
   cache1_value_t& value = cache1[key];
   value.b = (b & ~0xff) | depth;
+  value.p = nodep;
   value.s = s;
 }
 
-inline bool cache1_get(int key, board_t b, int depth, float* s) {
+inline bool cache1_get(int key, board_t b, int depth, float nodep, float* s) {
   cache1_value_t& value = cache1[key];
   if ((value.b >> 8) == (b >> 8) &&
     (value.b & 0xff) >= unsigned(depth) &&
+    value.p >= nodep &&
     1) {
     *s = value.s;
     return true;
@@ -335,7 +338,7 @@ float search_min(board_t b, int depth, float nodep /*, int n2, int n4*/) {
 
   int key = cache1_key_hash(b);
   float s;
-  if (cache1_get(key, b, depth, &s))
+  if (cache1_get(key, b, depth, nodep, &s))
     return s;
 
   int blank = count_blank(b);
@@ -361,7 +364,7 @@ float search_min(board_t b, int depth, float nodep /*, int n2, int n4*/) {
     idx++;
   }
   float result = score / blank;
-  cache1_set(key, b, depth, result);
+  cache1_set(key, b, depth, nodep, result);
   return result;
 }
 
