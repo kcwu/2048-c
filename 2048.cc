@@ -29,7 +29,7 @@ int max_tile0;
 
 // ---------------------------------------------------------
 // parameters
-int max_lookahead = 6;
+int max_lookahead = 8;
 int max_lookaheads[] = {  // TODO fine tune
   6, 6, 6, 6,
   6, 6, 5, 5,
@@ -37,7 +37,7 @@ int max_lookaheads[] = {  // TODO fine tune
   4, 4, 4, 4,
 };
 
-float search_threshold = 0.6f;
+float search_threshold = 0.006f;
 int maybe_dead_threshold = 20;
 
 // ---------------------------------------------------------
@@ -274,8 +274,8 @@ inline void local_cache1_set(int depth, int key, int tileidx, int m, board_t b, 
   }
 }
 
-float search_min(board_t b, int depth, int n2, int n4);
-float search_max(board_t b, int depth, int tileidx, int tilev, int n2, int n4) {
+float search_min(board_t b, int depth, float nodep /*, int n2, int n4*/);
+float search_max(board_t b, int depth, int tileidx, int tilev, float nodep /*, int n2, int n4*/) {
   float best_score = -1e10;
   board_t t = transpose(b);
   for (int m = 0; m < 4; m++) {
@@ -286,7 +286,7 @@ float search_max(board_t b, int depth, int tileidx, int tilev, int n2, int n4) {
 
     float s;
     if (!local_cache1_get(depth, key, b2, &s)) {
-      s = search_min(b2, depth - 1, n2, n4);
+      s = search_min(b2, depth - 1, nodep /*, n2, n4*/);
       local_cache1_set(depth, key, tileidx, m, b2, s);
     }
 
@@ -328,8 +328,9 @@ inline bool cache1_get(int key, board_t b, int depth, float* s) {
 void cache1_clear() {
 }
 
-float search_min(board_t b, int depth, int n2, int n4) {
-  if (depth == 0 || (n4 > 0 || n2 > 4))
+float search_min(board_t b, int depth, float nodep /*, int n2, int n4*/) {
+//  if (depth == 0 || (n4 > 0 || n2 > 4))
+  if (depth == 0 || nodep < search_threshold)
     return eval(b);
 
   int key = cache1_key_hash(b);
@@ -339,18 +340,20 @@ float search_min(board_t b, int depth, int n2, int n4) {
 
   int blank = count_blank(b);
 
+  float nodep2 = nodep / blank;
   float score = 0;
   board_t tile = 1;
   board_t tmp = b;
   int idx = 0;
-  bool with_tile4 = (n4 == 0 && n2 <= 2);
+//  bool with_tile4 = (n4 == 0 && n2 <= 2);
+  bool with_tile4 = true;  // todo
   while (tile) {
     if ((tmp & 0xf) == 0) {
       if (with_tile4) {
-        score += search_max(b | tile, depth, idx, 0, n2+1, n4) * 0.9f;
-        score += search_max(b | tile << 1, depth, idx, 1, n2, n4+1) * 0.1f;
+        score += search_max(b | tile, depth, idx, 0, nodep2 * 0.9f /*, n2+1, n4*/) * 0.9f;
+        score += search_max(b | tile << 1, depth, idx, 1, nodep2 * 0.1f /*, n2, n4+1*/) * 0.1f;
       } else {
-        score += search_max(b | tile, depth, idx, 0, n2+1, n4);
+        score += search_max(b | tile, depth, idx, 0, nodep2 * 0.9f /*, n2+1, n4*/);
       }
     }
     tile <<= 4;
@@ -476,7 +479,7 @@ int root_search_move(board_t b) {
 
     int lookahead = max_lookahead;
     //lookahead = max_lookaheads[count_blank(b2)];
-    float s = search_min(b2, lookahead - 1, 0, 0);
+    float s = search_min(b2, lookahead - 1, 1.0 /*, 0, 0*/);
     if (s > best_score) {
       best_score = s;
       best_move = m;
