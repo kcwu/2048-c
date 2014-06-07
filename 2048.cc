@@ -40,6 +40,24 @@ int max_lookaheads[] = {  // TODO fine tune
 float search_threshold = 0.006f;
 int maybe_dead_threshold = 20;
 
+float para_reverse_weight = 1.5;
+float para_reverse = 2.0;
+float para_reverse_4 = 1.0;
+float para_reverse_8 = 1.0;
+float para_reverse_12 = 1.0;
+float para_equal = 0.0;
+float para_inc_0 = 0;
+float para_inc_1 = 0;
+float para_inc_2 = 4;
+float para_inc_3 = 0;
+float para_smooth = 2.0;
+float para_smooth_4 = 1.0;
+float para_smooth_8 = 1.0;
+float para_smooth_12 = 1.0;
+float para_blank_1 = 0.0;
+float para_blank_2 = 1.0;
+float para_blank_3 = 0.0;
+
 // ---------------------------------------------------------
 // Utility functions for testing and debugging
 // Shoudn't be used in final solver code
@@ -91,6 +109,7 @@ row_t row_right_table[ROW_NUM];
 float my_score_table_L[65536];
 float my_score_table_R[65536];
 uint16_t diff_table[65536][4];
+float blank_score[17];
 
 inline ALWAYS_INLINE board_t transpose(board_t x) {
   board_t t;
@@ -193,8 +212,7 @@ float eval(board_t b) {
   board_t t = transpose(b);
   float score = 0;
 
-  int fill = 16 - count_blank(b);
-  score += - fill*fill;
+  score += blank_score[count_blank(b)];
   score += eval_smoothness(b, t);
   score += eval_monotone(b, t);
 
@@ -536,6 +554,33 @@ void build_move_table() {
 }
 
 void build_eval_table() {
+  float reverse_penalty[16];
+  for (int i = 0; i < 16; i++) {
+    float v = 0;
+    if (i == 1)
+      v = 2*para_reverse_weight;
+    else if (i > 1)
+      v = reverse_penalty[i-1] * para_reverse;
+    if (i >= 4) v *= para_reverse_4;
+    if (i >= 8) v *= para_reverse_8;
+    if (i >= 12) v *= para_reverse_12;
+    reverse_penalty[i] = v;
+  }
+  float smooth_weight[16] = {0};
+  for (int i = 0; i < 16; i++) {
+    float v = 1;
+    if (i > 0)
+      v = smooth_weight[i-1] * para_smooth;
+    if (i >= 4) v *= para_smooth_4;
+    if (i >= 8) v *= para_smooth_8;
+    if (i >= 12) v *= para_smooth_12;
+    smooth_weight[i] = v;
+  }
+  for (int i = 0; i <= 16; i++) {
+    int f = 16 - i;
+    blank_score[i] = - ((para_blank_3*f+para_blank_2)*f+para_blank_1)*f;
+  }
+
   for (unsigned row = 0; row <= 0xffff; row++) {
     unsigned urow[N] = {
       row >> 0 & 0xf,
@@ -546,38 +591,35 @@ void build_eval_table() {
 
 #if 1
     {
-      int L, R;
+      int L;
       int m = 0;
-      L = R = 0;
+      L = 0;
       for (int i = 0; i < 3; i++) {
         if (urow[i] != 0 && urow[i] >= urow[i+1]) {
+          if (urow[i] == urow[i+1])
+            L += para_equal;
           m++;
-          L += m*m * 4;
+          L += ((para_inc_3*m+para_inc_2)*m+para_inc_1)*m + para_inc_0;
         } else {
-          L -= abs((urow[i]?1<<urow[i]:0) - (urow[i+1]?1<<urow[i+1]:0)) * 1.5;
+          L -= abs(reverse_penalty[urow[i]] - reverse_penalty[urow[i+1]]);
           m = 0;
         }
       }
 
-      m = 0;
-      for (int i=0;i<3;i++) {
-        if (urow[i] <= urow[i+1] && urow[i+1]) {
-          m++;
-          R += m*m * 4;
-        } else {
-          R -= abs((urow[i]?1<<urow[i]:0) - (urow[i+1]?1<<urow[i+1]:0)) * 1.5;
-          m = 0;
-        }
-      }
       my_score_table_L[row] = L;
-      my_score_table_R[row] = R;
+      my_score_table_R[row_reverse(row)] = L;
     }
 #endif
 
 #if 1
     {
       int d[4];
-      int x[4] = { 1 << urow[0], 1<<urow[1], 1<<urow[2], 1<<urow[3]};
+      int x[4] = {
+        smooth_weight[urow[0]],
+        smooth_weight[urow[1]],
+        smooth_weight[urow[2]],
+        smooth_weight[urow[3]],
+      };
       d[0] = abs(x[1]-x[0]);
       d[1] = std::min(abs(x[0]-x[1]),abs(x[2]-x[1]));
       d[2] = std::min(abs(x[1]-x[2]),abs(x[3]-x[2]));
@@ -722,7 +764,30 @@ int main(int argc, char* argv[]) {
         if (sscanf(optarg, "%d,%f,%d",
             &max_lookahead,
             &search_threshold,
-            &maybe_dead_threshold) != 3) {
+            &maybe_dead_threshold) == 3) {
+        } else if (sscanf(optarg, "reverse=%f,%f,%f,%f,%f",
+              &para_reverse_weight,
+              &para_reverse,
+              &para_reverse_4,
+              &para_reverse_8,
+              &para_reverse_12)==5) {
+        } else if (sscanf(optarg, "equal=%f",
+              &para_equal)==1) {
+        } else if (sscanf(optarg, "inc=%f,%f,%f,%f",
+              &para_inc_0,
+              &para_inc_1,
+              &para_inc_2,
+              &para_inc_3) == 4) {
+        } else if (sscanf(optarg, "smooth=%f,%f,%f,%f",
+              &para_smooth,
+              &para_smooth_4,
+              &para_smooth_8,
+              &para_smooth_12) == 4) {
+        } else if (sscanf(optarg, "blank=%f,%f,%f",
+              &para_blank_1,
+              &para_blank_2,
+              &para_blank_3) == 3) {
+        } else {
           printf("bad arg -p %s", optarg);
           return -1;
         }
