@@ -25,6 +25,7 @@ typedef uint16_t row_t;
 // globals
 FILE* log_fp = NULL;
 int flag_verbose;
+int max_tile0;
 
 // ---------------------------------------------------------
 // parameters
@@ -126,10 +127,12 @@ inline ALWAYS_INLINE board_t do_move_1(board_t b) {
 }
 
 inline ALWAYS_INLINE board_t do_move_2(board_t b, board_t t) {
+  (void) b;
   return transpose(do_move_0(t));
 }
 
 inline ALWAYS_INLINE board_t do_move_3(board_t b, board_t t) {
+  (void) b;
   return transpose(do_move_1(t));
 }
 
@@ -227,6 +230,15 @@ inline uint64_t murmur128_64_to_32(uint64_t x) {
   h2 = fmix(h2);
   h1 += h2;
   return h1;
+}
+
+int find_max_tile(board_t b) {
+  int r = 0;
+  while (b) {
+    r = std::max(r, (int)(b&0xf));
+    b >>= 4;
+  }
+  return r;
 }
 
 struct local_cache1_value_t {
@@ -331,9 +343,10 @@ float search_min(board_t b, int depth, int n2, int n4) {
   board_t tile = 1;
   board_t tmp = b;
   int idx = 0;
+  bool with_tile4 = (n4 == 0 && n2 <= 2);
   while (tile) {
     if ((tmp & 0xf) == 0) {
-      if (n4 == 0 && n2 <= 2) {
+      if (with_tile4) {
         score += search_max(b | tile, depth, idx, 0, n2+1, n4) * 0.9f;
         score += search_max(b | tile << 1, depth, idx, 1, n2, n4+1) * 0.1f;
       } else {
@@ -437,6 +450,7 @@ int root_search_move(board_t b) {
   float best_score = -1e10-1;
   int best_move = 0;
 
+  max_tile0 = find_max_tile(b);
   int badmove[4] = {0};
   int nbadmove = 0;
   cache2_clear();
@@ -444,7 +458,8 @@ int root_search_move(board_t b) {
 #if 1
   for(int m = 0; m < 4; m++) {
     board_t b2 = do_move(b, t, m);
-    if (b == b2 || maybe_dead_minnode(b2, maybe_dead_threshold)) {
+    int threshold = maybe_dead_threshold;
+    if (b == b2 || maybe_dead_minnode(b2, threshold)) {
       badmove[m] = 1;
       nbadmove++;
     }
@@ -642,15 +657,6 @@ bool is_can_move(board_t b) {
   return false;
 }
 
-int find_max_tile(board_t b) {
-  int r = 0;
-  while (b) {
-    r = std::max(r, (int)(b&0xf));
-    b >>= 4;
-  }
-  return r;
-}
-
 void main_loop() {
   double t0 = now();
   char log_filename[1024];
@@ -689,6 +695,7 @@ void main_loop() {
       break;
     }
     move_count++;
+    my_random_seed ^= murmur128_64_to_32(b);
     b = random_tile(b2, &num_tile4);
     if (flag_verbose) {
       printf("step %d, move %c, score=%d\n",
