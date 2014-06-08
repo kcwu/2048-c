@@ -1,17 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <time.h>
-#include <unistd.h>
 #include <string.h>
 #include <algorithm>
 
-#define N 4
-#define ROW_NUM 65536
-#define ROW_MASK 0xffffll
-
-//#define LOG_MOVES
-//#define REPLAY_MOVES
+#include "bot.h"
 //#define TUNING
 
 #if 0
@@ -20,12 +12,7 @@
 #define ALWAYS_INLINE
 #endif
 
-typedef uint64_t board_t;
-typedef uint16_t row_t;
-
 // globals
-FILE* log_fp = NULL;
-int flag_verbose;
 int max_tile0;
 
 // ---------------------------------------------------------
@@ -68,48 +55,6 @@ float para_blank_1 = 0.0;
 float para_blank_2 = 1.0;
 float para_blank_3 = 0.0;
 
-// ---------------------------------------------------------
-// Utility functions for testing and debugging
-// Shoudn't be used in final solver code
-int my_random_seed = 0;
-inline int my_random() {
-    my_random_seed = my_random_seed * 1103515245 + 12345;
-    return my_random_seed % ((unsigned long)RAND_MAX + 1);
-}
-
-double now() {
-   return (double)clock() / CLOCKS_PER_SEC;
-}
-
-void print_urow(int urow[N]) {
-  printf("%d %d %d %d\n", urow[0], urow[1], urow[2], urow[3]);
-}
-
-void print_row(row_t r) {
-  printf("%04x\n", r);
-}
-
-void print_board(board_t b) {
-  printf("%04llx\n%04llx\n%04llx\n%04llx\n",
-      b & 0xffffll,
-      b >> 16 & 0xffffll,
-      b >> 32 & 0xffffll,
-      b >> 48 & 0xffffll);
-}
-
-void print_pretty_board(board_t b) {
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      int p = i * 4 + (3 - j);
-      int x = b >> (p*4) & 0xf;
-      if (x)
-        printf("%6d", 1<<x);
-      else
-        printf("%6s", ".");
-    }
-    printf("\n");
-  }
-}
 
 // ---------------------------------------------------------
 // Functions to implement solver. Must be highly OPTIMIZED
@@ -129,6 +74,9 @@ inline ALWAYS_INLINE board_t transpose(board_t x) {
   x ^= t ^ (t << 24);
   return x;
 }
+board_t transpose_ex(board_t x) {
+  return transpose(x);
+}
 
 inline ALWAYS_INLINE int count_blank(board_t b) {
   b = ~b;
@@ -137,6 +85,9 @@ inline ALWAYS_INLINE int count_blank(board_t b) {
   b &= 0x1111111111111111ull;
   b = (b * 0x1111111111111111ull) >> 60;
   return b;
+}
+int count_blank_ex(board_t b) {
+  return count_blank(b);
 }
 
 inline ALWAYS_INLINE board_t do_move_0(board_t b) {
@@ -165,7 +116,7 @@ inline ALWAYS_INLINE board_t do_move_3(board_t b, board_t t) {
   return transpose(do_move_1(t));
 }
 
-inline ALWAYS_INLINE board_t do_move(board_t b, board_t t, int m) {
+inline ALWAYS_INLINE board_t do_move(board_t b, board_t t, int m)  {
   switch (m) {
     case 0: return do_move_0(b);
     case 1: return do_move_1(b);
@@ -173,6 +124,10 @@ inline ALWAYS_INLINE board_t do_move(board_t b, board_t t, int m) {
     case 3: return do_move_3(b, t);
   }
   return 0;
+}
+
+board_t do_move_ex(board_t b, board_t t, int m)  {
+  return do_move(b, t, m);
 }
 
 float apply_score_table(board_t b, float* table) {
@@ -241,14 +196,20 @@ inline uint32_t murmur3_simplified(uint64_t x) {
   x ^= x >> 33;
   return x;
 }
+uint32_t murmur3_simplified_ex(uint64_t x) {
+  return murmur3_simplified(x);
+}
 
-int find_max_tile(board_t b) {
+inline int find_max_tile(board_t b) {
   int r = 0;
   while (b) {
     r = std::max(r, (int)(b&0xf));
     b >>= 4;
   }
   return r;
+}
+int find_max_tile_ex(board_t b) {
+  return find_max_tile(b);
 }
 
 struct local_cache1_value_t {
@@ -460,7 +421,6 @@ bool maybe_dead_maxnode(board_t b, int depth) {
   return true;
 }
 
-char move_str[] = "RLUD";
 int root_search_move(board_t b) {
   cache1_clear();
   float best_score = -1e10-1;
@@ -643,174 +603,8 @@ void build_eval_table() {
   }
 }
 
-void init() {
+void init_bot() {
   build_move_table();
   build_eval_table();
 }
 
-// ---------------------------------------------------------
-// Functions to implement game runner
-int calculate_game_score(board_t b, int num_tile4) {
-  int score = 0;
-  // 4: 4
-  // 8: 8 + 4*2
-  // 16: 16 + 8*2 + 4*4
-  // k: k*(log(k)-1)
-  while (b) {
-    int rank = b & 0xf;
-    if (rank >= 2) {
-      score += (rank - 1) << rank;
-    }
-    b >>= 4;
-  }
-  return score - num_tile4 * 4;
-}
-
-board_t random_tile(board_t b, int* num_tile4) {
-  board_t tile = my_random() % 10 == 0 ? 2 : 1;
-  if (tile == 2)
-    (*num_tile4)++;
-
-  int blank = count_blank(b);
-  if (blank == 0) blank = 16;  // hack for "blank" overflow
-  int n = my_random() % blank;
-  board_t tmp = b;
-  while (1) {
-    while (tmp & 0xf) {
-      tmp >>= 4;
-      tile <<= 4;
-    }
-    if (n-- == 0)
-      break;
-    tmp >>= 4;
-    tile <<= 4;
-  }
-  return b | tile;
-}
-
-bool is_can_move(board_t b) {
-  board_t t = transpose(b);
-  for (int m = 0; m < 4; m++) {
-    if (b != do_move(b, t, m))
-      return true;
-  }
-  return false;
-}
-
-void main_loop() {
-  double t0 = now();
-  char log_filename[1024];
-  sprintf(log_filename, "log/%d.txt", my_random_seed);
-
-  board_t b = 0;
-  int num_tile4 = 0;
-  b = random_tile(b, &num_tile4);
-  b = random_tile(b, &num_tile4);
-
-#if defined(REPLAY_MOVES)
-  log_fp = fopen(log_filename, "r");
-#elif defined(LOG_MOVES)
-  log_fp = fopen(log_filename, "w");
-#endif
-
-  int move_count = 0;
-  if (flag_verbose)
-    print_pretty_board(b);
-  while (is_can_move(b)) {
-    int m = 0;
-#if defined(REPLAY_MOVES)
-    if (!log_fp || fscanf(log_fp, "move %d\n", &m) != 1) {
-      printf("bad replay\n");
-      break;
-    }
-#elif defined(LOG_MOVES)
-    m = root_search_move(b);
-    if (log_fp) fprintf(log_fp, "move %d\n", m);
-#else
-    m = root_search_move(b);
-#endif
-    board_t b2 = do_move(b, transpose(b), m);
-    if (b == b2) {
-      printf("bad move\n");
-      break;
-    }
-    move_count++;
-    my_random_seed ^= murmur3_simplified(b);
-    b = random_tile(b2, &num_tile4);
-    if (flag_verbose) {
-      printf("step %d, move %c, score=%d\n",
-          move_count, move_str[m],
-          calculate_game_score(b, num_tile4));
-      print_pretty_board(b);
-    }
-#if 0
-    print_board(b);
-    printf("\n");
-    printf("\n");
-#endif
-  }
-  double t1 = now();
-  printf("time=%f, final score=%d, moves=%d, max tile=%d\n",
-      t1-t0,
-      calculate_game_score(b, num_tile4),
-      move_count,
-      find_max_tile(b));
-#if defined(REPLAY_MOVES) || defined(LOG_MOVES)
-  fclose(log_fp);
-#endif
-}
-
-int main(int argc, char* argv[]) {
-  int opt;
-  while ((opt = getopt(argc, argv, "vs:p:")) != -1) {
-    switch (opt) {
-      case 'v':
-        flag_verbose = 1;
-        break;
-      case 's':
-        my_random_seed = atoi(optarg);
-        break;
-      case 'p':
-        if (sscanf(optarg, "%d,%f,%d",
-            &max_lookahead,
-            &search_threshold,
-            &maybe_dead_threshold) == 3) {
-        } else if (sscanf(optarg, "reverse=%f,%f,%f,%f,%f",
-              &para_reverse_weight,
-              &para_reverse,
-              &para_reverse_4,
-              &para_reverse_8,
-              &para_reverse_12)==5) {
-        } else if (sscanf(optarg, "equal=%f",
-              &para_equal)==1) {
-        } else if (sscanf(optarg, "inc=%f,%f,%f,%f",
-              &para_inc_0,
-              &para_inc_1,
-              &para_inc_2,
-              &para_inc_3) == 4) {
-        } else if (sscanf(optarg, "smooth=%f,%f,%f,%f",
-              &para_smooth,
-              &para_smooth_4,
-              &para_smooth_8,
-              &para_smooth_12) == 4) {
-        } else if (sscanf(optarg, "blank=%f,%f,%f",
-              &para_blank_1,
-              &para_blank_2,
-              &para_blank_3) == 3) {
-        } else {
-          printf("bad arg -p %s", optarg);
-          return -1;
-        }
-        break;
-      default: /* '?' */
-        printf("unknown option '%c'\n", opt);
-        break;
-    }
-  }
-
-  init();
-
-  main_loop();
-
-  return 0;
-}
