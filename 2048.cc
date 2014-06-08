@@ -12,6 +12,7 @@
 
 //#define LOG_MOVES
 //#define REPLAY_MOVES
+//#define TUNING
 
 #if 0
 #define ALWAYS_INLINE __attribute__((always_inline))
@@ -29,7 +30,11 @@ int max_tile0;
 
 // ---------------------------------------------------------
 // parameters
+#ifdef TUNING
+int max_lookahead = 4;
+#else
 int max_lookahead = 8;
+#endif
 int max_lookaheads[] = {  // TODO fine tune
   6, 6, 6, 6,
   6, 6, 5, 5,
@@ -37,8 +42,13 @@ int max_lookaheads[] = {  // TODO fine tune
   4, 4, 4, 4,
 };
 
+#ifdef TUNING
+float search_threshold = 0.01f;
+int maybe_dead_threshold = 12;
+#else
 float search_threshold = 0.006f;
 int maybe_dead_threshold = 20;
+#endif
 
 float para_reverse_weight = 1.5;
 float para_reverse = 2.0;
