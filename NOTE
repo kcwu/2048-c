@@ -4,6 +4,12 @@ L2 Cache: 8*256 KB
 L3 Cache: 20MB
 support: MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, AVX, Enhanced Intel SpeedStep Technology (EIST), Intel 64, XD bit (an NX bit implementation), TXT, Intel VT-x, Intel EPT,[23] Intel VT-d, Intel VT-c,[22][25] Intel x8 SDDC,[23] Hyper-threading (except E5-2603, E5-2609), Turbo Boost, AES-NI, Smart Cache.
 ---
+opensvn
+Xeon E5335 2.0G
+L2 Cache: 2*4 MB
+support: MMX, SSE, SSE2, SSE3, SSSE3, Intel 64, XD bit (an NX bit implementation), Intel VT-x
+---
+host
 Xeon E5420 2.5G
 support: MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, Intel 64, XD bit (an NX bit implementation), Intel VT-x, Demand-Based Switching except E5405, L5408; EIST except E5405
 L2 Cache: 2*6 MB

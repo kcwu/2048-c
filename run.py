@@ -10,9 +10,11 @@ import hashlib
 import urllib2
 import base64
 import random
+import datetime
 
 free_server = multiprocessing.Queue()
 extra_args = []
+#extra_args = ['-p', 'reverse=1.5,2.0,1.0650918863779966,1.0,1.129', '-p', 'equal=0.0', '-p', 'inc=-0.029889330949802943,-0.064,4.0,0.0', '-p', 'smooth=2.0,1.0,1.0,1.04437905327448', '-p', 'blank=0.0,1.0,0.0']
 
 def md5(s):
     m = hashlib.md5()
@@ -50,7 +52,11 @@ def run(server, exe, arg):
 def run(server, exe, arg):
     url = 'http://%s/run' % server
     data = json.dumps([base64.b64encode(exe), arg])
-    r = urllib2.urlopen(url, data=data)
+    try:
+        r = urllib2.urlopen(url, data=data)
+    except urllib2.URLError:
+        print 'error', url
+        raise
     result = json.loads(r.read())
     #print result
     assert result['done'] == 'ok'
@@ -80,7 +86,7 @@ def func((exe, exe_md5, idx)):
     moves = int(m.group(3))
     maxtile = int(m.group(4))
     result = (t1-t0), moves, (t1-t0)/moves, score, maxtile
-    print idx, result
+    #print idx, result
 
     try:
         os.mkdir('cache/%s' % exe_md5)
@@ -108,6 +114,9 @@ def query_servers():
     for s in server_lists:
         r = urllib2.urlopen('http://%s/config' % s)
         x = r.read()
+        if 5 <= datetime.date.today().weekday() <= 6:
+            print '\tweekend force 30'
+            x = 30
         print s, int(x)
         result += [s] * int(x)
     random.shuffle(result)
@@ -119,6 +128,8 @@ def init():
     ncpu = free_server.qsize()
     print 'total cpu', ncpu
 
+pool = None
+
 def run_jobs(njob):
     ncpu = free_server.qsize()
     exe = file('2048', 'rb').read()
@@ -127,7 +138,9 @@ def run_jobs(njob):
     if njob == 1 or ncpu == 1:
         result = map(func, jobs)
     else:
-        pool = multiprocessing.dummy.Pool(processes=ncpu)
+        global pool
+        if not pool:
+            pool = multiprocessing.dummy.Pool(processes=ncpu)
         result = pool.map(func, jobs)
 
     totaltime = []
@@ -146,9 +159,10 @@ def run_jobs(njob):
     scores.sort()
     ranks.sort()
 
-    print scores
+    rank_summary = [round(p*100, 1) for p in count_ranks(ranks)]
+    #print scores
     #print [round(t*1000,1) for t in ts]
-    print 'rank', [round(p*100, 1) for p in count_ranks(ranks)]
+    print 'rank', rank_summary
     #if len(scores) > 5:
     #    scores = scores[2:-2] # remove low 2 and high 2
     print 'median %d, avg %.1f, %.2fms/move, weighted %.2fms/move' % (
@@ -157,6 +171,7 @@ def run_jobs(njob):
             1000.*sum(ts) / len(ts),
             1000.*sum(totaltime) / sum(moves),
             )
+    return rank_summary
 
 def main():
     init()
