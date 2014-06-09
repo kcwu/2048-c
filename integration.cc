@@ -1,17 +1,17 @@
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
+#include <signal.h>
+#include <setjmp.h>
 
 #define INTEGRATION
 #include "2048.h"
 #include "bot.h"
 #include "util.h"
+#include "bot_opt.h"
 
 //#define PRINT
 
-void (*init_bot_func)(void);
-int (*root_search_move_func)(board_t);
-int* max_lookahead_ptr;
+init_bot_func_t init_bot_func;
+root_search_move_func_t root_search_move_func;
+max_lookahead_ptr_t max_lookahead_ptr;
 
 board_t convert_grid_to_board(Grid g) {
   board_t b = 0;
@@ -118,47 +118,24 @@ board_t sample_boards[] = {
   0x00001022248c349eull, 0x13201800148c219eull, 0x00111232337c56aeull, 0x02111322258c57aeull,
 };
 
-#if 1
-void load_code() {
-  int fd;
-    off_t size;
-    void* p;
+jmp_buf saved_state;
 
-  fd = open ("bot_opt.bin", O_RDONLY);
-  size = lseek (fd, 0, SEEK_END);
-  lseek (fd, 0, SEEK_SET);
-  // TODO find address
-  p = mmap ((void*)0x10000000, size, PROT_EXEC | PROT_READ | PROT_WRITE,
-      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  read (fd, p, size);
-  close (fd);
-
-  FILE* fp = fopen("bot_opt.info", "r");
-  char line[1024];
-  while (fgets(line, sizeof(line), fp)) {
-    int addr;
-    //printf("line %s\n", line);
-    if (sscanf(line, ".text init_bot %d", &addr) == 1) {
-      init_bot_func = (void(*)(void))((char*)p + addr);
-    }
-    if (sscanf(line, ".text root_search_move %d", &addr) == 1) {
-      root_search_move_func = (int(*)(board_t))((char*)p + addr);
-    }
-    if (sscanf(line, ".data max_lookahead %d", &addr) == 1) {
-      max_lookahead_ptr = (int*)((char*)p + addr);
-    }
-    if (sscanf(line, "reloc %d", &addr) == 1) {
-      *(int64_t*)((char*)p + addr) += (int64_t)p;
-    }
-  }
-  fclose(fp);
+void handle_signal(int sig) {
+  (void)sig;
+  longjmp(saved_state, 1);
 }
-#endif
 
 void init() {
-#if 1
-  load_code();
-#endif
+  signal(SIGSEGV, handle_signal);
+  signal(SIGBUS, handle_signal);
+  signal(SIGILL, handle_signal);
+  if (setjmp(saved_state) == 0)
+    load_code();
+  else {
+    printf("something wrong, recovered\n");
+    init_bot_func = NULL;
+  }
+
   if (max_lookahead_ptr == NULL ||
       init_bot_func == NULL ||
       root_search_move_func == NULL) {
@@ -168,6 +145,7 @@ void init() {
     root_search_move_func = root_search_move;
   }
   init_bot_func();
+
 
   int n_sample = sizeof(sample_boards)/sizeof(sample_boards[0]);
 
@@ -188,6 +166,9 @@ void init() {
   }
   *max_lookahead_ptr = to_lookahead;
 
+  signal(SIGSEGV, SIG_DFL);
+  signal(SIGBUS, SIG_DFL);
+  signal(SIGILL, SIG_DFL);
 }
 
 int main(int argc, char* argv[]){

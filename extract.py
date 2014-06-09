@@ -89,13 +89,55 @@ def main():
             shellcode.write(struct.pack("<L",value&0xffffffff))
         shellcode.seek(shellcode.len)
 
-    with file('bot_opt.bin', 'wb') as fp:
-        fp.write(shellcode.getvalue())
+    def to_c_array(s):
+        if len(s) % 4 != 0:
+            s += chr(0) * (4 - len(s) % 4)
+        bs = map(ord, s)
+        result = ''
+        for i in range(0, len(bs), 8):
+            result += ' ' + ''.join(' 0x%02x,' % b for b in bs[i:i+8]) + '\n'
+        return result
+
+    def to_c_array2(arr):
+        result = ''
+        for i in range(0, len(arr), 10):
+            result += ' ' + ''.join(' %d,' % x for x in arr[i:i+10]) + '\n'
+        return result
+
+    with file('bot_opt.cc', 'w') as fp:
+        bss_size = elf.get_section_by_name('.bss')['sh_size']
+        assert shellcode.getvalue()[-bss_size:] == chr(0) * bss_size
+
+        pagesize = 4096
+
+        fp.write('''#include <sys/mman.h>
+#include "bot_opt.h"
+
+static unsigned char code[%d] __attribute__((aligned(4096))) = {
+%s};
+static int patch[] = {
+%s};
+''' % (
+        (shellcode.len + pagesize-1) / pagesize * pagesize,
+        to_c_array(shellcode.getvalue()[:-bss_size]),
+        to_c_array2(relocs),
+        ))
+    
+            #fp.write('reloc %d\n' % rel)
+        fp.write('''
+void load_code() {
+  if ((uintptr_t)code > 0xffffffffull)
+    return;
+  mprotect(code, sizeof(code), PROT_READ|PROT_WRITE|PROT_EXEC);
+  for (unsigned int i = 0; i < sizeof(patch)/sizeof(patch[0]); i++) {
+    *(uint32_t*)(void*)(code + patch[i]) += (uintptr_t)code;
+  }
+''')
+
+    #with file('bot_opt.bin', 'wb') as fp:
+    #    fp.write(shellcode.getvalue())
 
     
-    with file('bot_opt.info', 'wb') as fp:
-        for rel in relocs:
-            fp.write('reloc %d\n' % rel)
         # export symbols
         for entry in (
                 'root_search_move',
@@ -113,8 +155,17 @@ def main():
             
             start = base + offset
             print section, entry, start
-            fp.write('%s %s %d\n' % (section, entry, start))
+            if section == '.text':
+                fp.write('  %s_func = (%s_func_t)((char*)code + %d);\n' % (
+                    entry, entry, start))
+            else:
+                fp.write('  %s_ptr = (%s_ptr_t)((char*)code + %d);\n' % (
+                    entry, entry, start))
+            #fp.write('%s %s %d\n' % (section, entry, start))
 
+
+        fp.write('''}
+''')
 
 if __name__ == '__main__':
     main()
