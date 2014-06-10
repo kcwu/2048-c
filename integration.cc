@@ -16,6 +16,7 @@ maybe_dead_threshold_ptr_t maybe_dead_threshold_ptr;
 int min_xi = 0;
 int init_xi = 2;
 int max_xi = 9;
+bool emergency;
 int xi;
 int xis[] = { 16, 18, 20, 22, 24, 26, 27, 28, 29, 30 };
 int flag_verbose;
@@ -81,31 +82,34 @@ void time_control(int n, int idx) {
 
   int remain = n - idx;
   int old_xi = xi;
+  xi = init_xi;
 
   double worst_factor = 1.0 * (remain + 3) / remain;
 
-  for (int i = min_xi; i <= max_xi; i++) {
-    // don't explore unknown if remain too less
-    if (remain < n/10 &&
-        i > min_xi &&
-        move_count_for_threshold[i-1] > 0 &&
-        move_count_for_threshold[i] == 0)
-      break;
+  if (!emergency) {
+    for (int i = min_xi; i <= max_xi; i++) {
+      // don't explore unknown if remain too less
+      if (remain < n/10 &&
+          i > min_xi &&
+          move_count_for_threshold[i-1] > 0 &&
+          move_count_for_threshold[i] == 0)
+        break;
 
-    bool enough_try = move_count_for_threshold[i] > total_move/idx*3;
-    double estimate = total_time/total_move*idx + avg_time_for_threshold[i]  * worst_factor * remain;
+      bool enough_try = move_count_for_threshold[i] > total_move/idx*3;
+      double estimate = total_time/total_move*idx + avg_time_for_threshold[i]  * worst_factor * remain;
 
-    if (!enough_try || estimate < time_limit * n)
-      xi = i;
+      if (!enough_try || estimate < time_limit * n)
+        xi = i;
 
-    if (estimate >= time_limit * n)
-      break;
+      if (estimate >= time_limit * n)
+        break;
 
-    // don't inc twice
-    if (i > min_xi &&
-        move_count_for_threshold[i-1] > 0 &&
-        move_count_for_threshold[i] == 0) {
-      break;
+      // don't inc twice
+      if (i > min_xi &&
+          move_count_for_threshold[i-1] > 0 &&
+          move_count_for_threshold[i] == 0) {
+        break;
+      }
     }
   }
 
@@ -132,6 +136,9 @@ void time_control(int n, int idx) {
             );
       if (n > 10 && remain < 5) {
         --*max_lookahead_ptr;
+        xi = init_xi;
+        *maybe_dead_threshold_ptr = xis[xi];
+        emergency = true;
         if (flag_verbose)
           printf("dec max_lookahead to %d\n", *max_lookahead_ptr);
       }
@@ -180,7 +187,10 @@ void main_loop(int n) {
 #endif
 
       move_count++;
-      myGame.insertDirection(dir);
+      if (!myGame.insertDirection(dir)) {
+        printf("invalid move??\n");
+        break;
+      }
       isGameOver = myGame.isGameOver();
 
 #ifdef PRINT
