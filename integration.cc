@@ -131,6 +131,7 @@ void init() {
   signal(SIGSEGV, handle_signal);
   signal(SIGBUS, handle_signal);
   signal(SIGILL, handle_signal);
+  signal(SIGALRM, handle_signal);
   if (setjmp(saved_state) == 0)
     load_code();
   else {
@@ -146,7 +147,9 @@ void init() {
     init_bot_func = init_bot;
     root_search_move_func = root_search_move;
   }
+  alarm(5);
   init_bot_func();
+  alarm(0);
 
 
   // init time control
@@ -172,6 +175,7 @@ void init() {
   signal(SIGSEGV, SIG_DFL);
   signal(SIGBUS, SIG_DFL);
   signal(SIGILL, SIG_DFL);
+  signal(SIGALRM, SIG_DFL);
 }
 
 int main(int argc, char* argv[]){
