@@ -86,7 +86,10 @@ void time_control(int n, int idx) {
 
   for (int i = min_xi; i <= max_xi; i++) {
     // don't explore unknown if remain too less
-    if (remain < n/10 && move_count_for_threshold[i] == 0)
+    if (remain < n/10 &&
+        i > min_xi &&
+        move_count_for_threshold[i-1] > 0 &&
+        move_count_for_threshold[i] == 0)
       break;
 
     bool enough_try = move_count_for_threshold[i] > total_move/idx*3;
