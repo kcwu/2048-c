@@ -1,5 +1,6 @@
 #ifndef UTIL_H
 #define UTIL_H
+#include "common.h"
 
 extern int my_random_seed;
 extern char move_str[5];

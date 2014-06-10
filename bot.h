@@ -1,13 +1,7 @@
 #ifndef _BOT_H_
 #define _BOT_H_
-#include <stdint.h>
 
-typedef uint64_t board_t;
-typedef uint16_t row_t;
-
-#define N 4
-#define ROW_NUM 65536
-#define ROW_MASK 0xffffll
+#include "common.h"
 
 // main api
 extern "C" {

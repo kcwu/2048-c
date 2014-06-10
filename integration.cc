@@ -1,9 +1,8 @@
 #include <signal.h>
 #include <setjmp.h>
 
-#define INTEGRATION
+#include "common.h"
 #include "2048.h"
-#include "bot.h"
 #include "util.h"
 #include "bot_opt.h"
 
@@ -48,7 +47,7 @@ void main_loop(int n) {
     myGame.printGrid(35,2);
 #endif
 
-  for(int i = 0; i < n; i++){    
+  for(int i = 0; i < n; i++){
     isGameOver = false;
     while(!isGameOver){
 
@@ -57,7 +56,7 @@ void main_loop(int n) {
       myGame.getCurrentGrid(grid);
       board_t b = convert_grid_to_board(grid);
 
-      int m = root_search_move(b);
+      int m = root_search_move_func(b);
       switch (move_str[m]) {
         case 'L': dir = LEFT; break;
         case 'R': dir = RIGHT; break;
@@ -81,7 +80,6 @@ void main_loop(int n) {
       printf("  Score:    %d      \n", myGame.getScore());
       printf("  Max Score: %d      \n", myGame.getMaxScore());
 #endif
-
     }
 #ifdef PRINT
     myGame.printGrid(35,2);
@@ -89,6 +87,10 @@ void main_loop(int n) {
     if(i < n - 1)  myGame.reset();
   }
 }
+
+// put bot.h after mainloop to avoid call main api directly
+#define INTEGRATION
+#include "bot.h"
 
 board_t sample_boards[] = {
   0x6621533332211111ull, 0x8643553333101100ull, 0x9653531032001001ull, 0x9601843032232112ull,
@@ -147,6 +149,7 @@ void init() {
   init_bot_func();
 
 
+  // init time control
   int n_sample = sizeof(sample_boards)/sizeof(sample_boards[0]);
 
   int to_lookahead = 6;
