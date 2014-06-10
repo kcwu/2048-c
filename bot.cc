@@ -495,8 +495,18 @@ inline void row_move_left(unsigned row[N]) {
     }
   }
   oc++;
+#if 0
   while (oc < N)
     row[oc++] = 0;
+#else
+  // to avoid gcc 4.8 to use memset()
+  if (oc == 1)
+    row[1] = row[2] = row[3] = 0;
+  if (oc == 2)
+    row[2] = row[3] = 0;
+  if (oc == 3)
+    row[3] = 0;
+#endif
 }
 
 inline row_t row_reverse(row_t r) {
