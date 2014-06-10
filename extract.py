@@ -58,7 +58,7 @@ def main():
             continue
         symtab = elf.get_section(reloc_section['sh_link'])
         for reloc in reloc_section.iter_relocations():
-            print reloc
+            #print reloc
             #assert elf.get_machine_arch() == 'x64' and not reloc.is_RELA()
             assert elf.get_machine_arch() == 'x64' and reloc.is_RELA()
             reloc_base = offsets[section_name]
@@ -71,7 +71,7 @@ def main():
 
             shellcode.seek(reloc_base+reloc_offset)
             value = struct.unpack("<l",shellcode.read(4))[0]     #+ reloc['r_addend']
-            print "RELOC:",section_name, '0x%x' % reloc_base, '0x%x' % reloc_offset, "=>", target_name, '0x%x' % target_base,'0x%x' % target_offset, value, '(%s)' % target_symbol.name
+            #print "RELOC:",section_name, '0x%x' % reloc_base, '0x%x' % reloc_offset, "=>", target_name, '0x%x' % target_base,'0x%x' % target_offset, value, '(%s)' % target_symbol.name
             if reloc_type == ENUM_RELOC_TYPE_x64['R_X86_64_32']:
                 value = target_base + target_offset + value + reloc['r_addend']
                 relocs.append(reloc_base+reloc_offset)
