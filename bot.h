@@ -8,6 +8,7 @@ extern "C" {
 extern void init_bot(void);
 extern int root_search_move(board_t b);
 extern int max_lookahead;
+extern int maybe_dead_threshold;
 }
 
 #ifndef INTEGRATION // hiden to the integration, to avoid access by accident
@@ -19,7 +20,6 @@ extern int find_max_tile_ex(board_t b);
 extern int count_blank_ex(board_t b);
 
 extern float search_threshold;
-extern int maybe_dead_threshold;
 
 extern float para_reverse_weight;
 extern float para_reverse;

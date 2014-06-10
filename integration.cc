@@ -11,6 +11,14 @@
 init_bot_func_t init_bot_func;
 root_search_move_func_t root_search_move_func;
 max_lookahead_ptr_t max_lookahead_ptr;
+maybe_dead_threshold_ptr_t maybe_dead_threshold_ptr;
+
+int min_xi = 0;
+int init_xi = 2;
+int max_xi = 9;
+int xi;
+int xis[] = { 16, 18, 20, 22, 24, 26, 27, 28, 29, 30 };
+int flag_verbose;
 
 board_t convert_grid_to_board(Grid g) {
   board_t b = 0;
@@ -33,22 +41,120 @@ board_t convert_grid_to_board(Grid g) {
   return b;
 }
 
+int move_count_for_threshold[100];
+double time_for_threshold[100];
+double avg_time_for_threshold[100];
+double total_time;
+int total_move;
+double time_limit = 0.01;
+double base_speed[100];
+
+void time_record(int move_count, double t) {
+  total_time += t;
+  total_move += move_count;
+  if (flag_verbose) {
+    printf("move %d, t %f, avg %f\n", move_count, t, t/move_count*1000);
+    printf("over all %d, t %f, avg %f\n", total_move, total_time, total_time/total_move*1000);
+  }
+  move_count_for_threshold[xi] += move_count;
+  time_for_threshold[xi] += t;
+  avg_time_for_threshold[xi] = time_for_threshold[xi] / move_count_for_threshold[xi];
+
+  if (flag_verbose) {
+    printf("\t");
+    for (int i = min_xi; i <= max_xi; i++) {
+      printf("%d:%.2f, ",
+          xis[i], avg_time_for_threshold[i]*1000);
+    }
+    printf("\n");
+  }
+}
+
+void time_control(int n, int idx) {
+  if (flag_verbose)
+    printf("%d/%d\n", idx, n);
+  if (idx == 0) {
+    // use default
+    xi = init_xi;
+    return;
+  }
+
+  int remain = n - idx;
+  int old_xi = xi;
+
+  double worst_factor = 1.0 * (remain + 3) / remain;
+
+  for (int i = min_xi; i <= max_xi; i++) {
+    // don't explore unknown if remain too less
+    if (remain < n/10 && move_count_for_threshold[i] == 0)
+      break;
+
+    bool enough_try = move_count_for_threshold[i] > total_move/idx*3;
+    double estimate = total_time/total_move*idx + avg_time_for_threshold[i]  * worst_factor * remain;
+
+    if (!enough_try || estimate < time_limit * n)
+      xi = i;
+
+    if (estimate >= time_limit * n)
+      break;
+
+    // don't inc twice
+    if (i > min_xi &&
+        move_count_for_threshold[i-1] > 0 &&
+        move_count_for_threshold[i] == 0) {
+      break;
+    }
+  }
+
+  if (old_xi != xi) {
+    if (flag_verbose)
+      printf("switch from %d to %d\n", xis[old_xi], xis[xi]);
+    *maybe_dead_threshold_ptr = xis[xi];
+  } else {
+    if (flag_verbose)
+      printf("still use %d\n", xis[xi]);
+  }
+
+  if (base_speed[*max_lookahead_ptr] > 0) {
+    int avg_move = total_move / idx;
+    double base = base_speed[*max_lookahead_ptr];
+    double esti_time = (total_time + base * avg_move * remain);
+    double esti_move = avg_move * n;
+    if (esti_time / esti_move >= time_limit) {
+      if (flag_verbose)
+        printf("warning: too slow. (%.1f+%f*%d*%d) / %d = %f\n",
+            total_time, base, avg_move, remain, avg_move * n,
+            esti_time / esti_move
+
+            );
+      if (n > 10 && remain < 5) {
+        --*max_lookahead_ptr;
+        if (flag_verbose)
+          printf("dec max_lookahead to %d\n", *max_lookahead_ptr);
+      }
+    }
+  }
+}
+
 void main_loop(int n) {
   Game myGame;
 
   bool isGameOver;
 
 #ifdef PRINT
-    (void)system("clear");
-    gotoXY(5,0);
-    std::cout<<"Previous";
-    gotoXY(35,0);
-    std::cout<<"Current";
-    myGame.printGrid(35,2);
+  (void)system("clear");
+  gotoXY(5,0);
+  std::cout<<"Previous";
+  gotoXY(35,0);
+  std::cout<<"Current";
+  myGame.printGrid(35,2);
 #endif
 
   for(int i = 0; i < n; i++){
+    double t1 = now();
+    time_control(n, i);
     isGameOver = false;
+    int move_count = 0;
     while(!isGameOver){
 
       dir_e dir = INVALID;
@@ -70,6 +176,7 @@ void main_loop(int n) {
       myGame.printGrid(5,2);
 #endif
 
+      move_count++;
       myGame.insertDirection(dir);
       isGameOver = myGame.isGameOver();
 
@@ -81,10 +188,14 @@ void main_loop(int n) {
       printf("  Max Score: %d      \n", myGame.getMaxScore());
 #endif
     }
+    if (flag_verbose)
+      printf("  Score:    %d      \n", myGame.getScore());
 #ifdef PRINT
     myGame.printGrid(35,2);
 #endif
     if(i < n - 1)  myGame.reset();
+    double t2 = now();
+    time_record(move_count, t2-t1);
   }
 }
 
@@ -155,7 +266,7 @@ void init() {
   // init time control
   int n_sample = sizeof(sample_boards)/sizeof(sample_boards[0]);
 
-  int to_lookahead = 6;
+  int to_lookahead = 4;
   for (int lookahead = to_lookahead; lookahead <= 8; lookahead++) {
     double t0 = now();
     *max_lookahead_ptr = lookahead;
@@ -163,8 +274,10 @@ void init() {
       root_search_move_func(sample_boards[i]);
     }
     double t1 = now();
-    printf("%d %f\n", lookahead, t1-t0);
-    if (t1-t0 < 0.9) {
+    base_speed[lookahead] = (t1 - t0) / n_sample;
+    if (flag_verbose)
+      printf("%d %f\n", lookahead, t1-t0);
+    if (t1-t0 < 0.9*time_limit * n_sample) {
       to_lookahead = lookahead;
     } else {
       break;
@@ -181,11 +294,16 @@ void init() {
 int main(int argc, char* argv[]){
   int opt;
   int n = 100;
-  while ((opt = getopt(argc, argv, "n:")) != -1) {
+  while ((opt = getopt(argc, argv, "n:t:v")) != -1) {
     switch (opt) {
       case 'n':
         n = atoi(optarg);
         break;
+      case 't':
+        time_limit = atof(optarg);
+        break;
+      case 'v':
+        flag_verbose = 1;
     }
   }
 

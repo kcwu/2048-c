@@ -10,9 +10,9 @@ CXXFLAGS=-O2 -Wall -Wextra
 
 all: 2048 micro_optimize integration bot_opt.bin
 
-2048: Makefile util.cc util.h bot.cc bot.h main.cc
+2048: Makefile util.cc util.h bot.cc bot.h main.cc common.h
 	$(CXX) $(CXXFLAGS) -o 2048 bot.cc main.cc util.cc
-integration: Makefile util.cc util.h bot.cc bot.h integration.cc 2048.cpp 2048.h bot_opt.cc
+integration: Makefile util.cc util.h bot.cc bot.h integration.cc 2048.cpp 2048.h bot_opt.cc bot_opt.h common.h
 	$(CXX) $(CXXFLAGS) -o integration 2048.cpp bot.cc util.cc integration.cc bot_opt.cc
 
 bot.o: bot.h bot.cc Makefile
