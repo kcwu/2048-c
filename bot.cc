@@ -5,7 +5,6 @@
 #include <math.h>
 
 #include "bot.h"
-//#define TUNING
 
 #if 0
 #define ALWAYS_INLINE __attribute__((always_inline))
@@ -18,25 +17,10 @@ int max_tile0;
 
 // ---------------------------------------------------------
 // parameters
-#ifdef TUNING
-int max_lookahead = 4;
-#else
 int max_lookahead = 11;
-#endif
-int max_lookaheads[] = {  // TODO fine tune
-  6, 6, 6, 6,
-  6, 6, 5, 5,
-  5, 5, 5, 5,
-  4, 4, 4, 4,
-};
 
-#ifdef TUNING
-float search_threshold = 0.01f;
-int maybe_dead_threshold = 12;
-#else
 float search_threshold = 0.006f;
 int maybe_dead_threshold = 20;
-#endif
 
 #if 1
 typedef int64_t score_t;
@@ -482,7 +466,6 @@ int root_search_move(board_t b) {
     int lookahead = max_lookahead;
     // adpative search depth limit
     lookahead = std::min(max_lookahead, std::max(3, count_diff_tile(b)-2));
-    //lookahead = max_lookaheads[count_blank(b2)];
     score_t s = search_min(b2, lookahead - 1, 1.0 /*, 0, 0*/);
     if (s > best_score) {
       best_score = s;
