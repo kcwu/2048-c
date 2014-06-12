@@ -21,7 +21,7 @@ int max_tile0;
 #ifdef TUNING
 int max_lookahead = 4;
 #else
-int max_lookahead = 8;
+int max_lookahead = 11;
 #endif
 int max_lookaheads[] = {  // TODO fine tune
   6, 6, 6, 6,
@@ -436,6 +436,20 @@ bool maybe_dead_maxnode(board_t b, int depth) {
   return true;
 }
 
+int count_diff_tile(board_t b) {
+  int mask = 0;
+  while (b) {
+    mask |= 1 << (b & 0xf);
+    b >>= 4;
+  }
+  int count = 0;
+  for (int i = 1; i < 16; i++)
+    if (mask >> i & 1) {
+      count++;
+    }
+  return count;
+}
+
 int root_search_move(board_t b) {
   cache1_clear();
   score_t best_score = min_scores[max_tile0]-1;
@@ -466,6 +480,8 @@ int root_search_move(board_t b) {
       continue;
 
     int lookahead = max_lookahead;
+    // adpative search depth limit
+    lookahead = std::min(max_lookahead, std::max(3, count_diff_tile(b)-2));
     //lookahead = max_lookaheads[count_blank(b2)];
     score_t s = search_min(b2, lookahead - 1, 1.0 /*, 0, 0*/);
     if (s > best_score) {
