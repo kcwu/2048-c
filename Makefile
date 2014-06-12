@@ -11,7 +11,7 @@ CXXFLAGS=-O2 -Wall -Wextra
 COMMON_CC=util.cc bot.cc
 COMMON_H=util.h bot.h common.h
 
-all: 2048 micro_optimize integration bot_opt.bin
+all: 2048 micro_optimize integration
 
 2048: $(COMMON_CC) $(COMMON_H) Makefile main.cc
 	$(CXX) $(CXXFLAGS) -o 2048 $(COMMON_CC) main.cc
