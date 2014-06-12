@@ -37,6 +37,19 @@ float search_threshold = 0.006f;
 int maybe_dead_threshold = 20;
 #endif
 
+#if 1
+typedef int64_t score_t;
+// at least 18 for score, 8 for calculation, 10 for fraction?
+#define SCORE_BASE (1ll << 30)
+#define MIN_SCORE (-(1ll<<20) * SCORE_BASE)
+#define SCORE(v) (score_t)((v) * (1ll<<30))
+#else
+typedef double score_t;
+#define SCORE_BASE 1.0
+#define MIN_SCORE -1e10
+#define SCORE(v) (score_t)(v)
+#endif
+
 float para_reverse_weight = 1.5;
 float para_reverse = 2.0;
 float para_reverse_4 = 1.0;
@@ -61,10 +74,10 @@ float para_blank_3 = 0.0;
 
 row_t row_left_table[ROW_NUM];
 row_t row_right_table[ROW_NUM];
-float my_score_table_L[65536];
-float my_score_table_R[65536];
+score_t my_score_table_L[65536];
+score_t my_score_table_R[65536];
 uint16_t diff_table[65536][4];
-float blank_score[17];
+score_t blank_score[17];
 
 inline ALWAYS_INLINE board_t transpose(board_t x) {
   board_t t;
@@ -130,7 +143,7 @@ board_t do_move_ex(board_t b, board_t t, int m)  {
   return do_move(b, t, m);
 }
 
-float apply_score_table(board_t b, float* table) {
+score_t apply_score_table(board_t b, score_t* table) {
   return
     table[(b >>  0) & ROW_MASK] +
     table[(b >> 16) & ROW_MASK] +
@@ -138,11 +151,11 @@ float apply_score_table(board_t b, float* table) {
     table[(b >> 48) & ROW_MASK];
 }
 
-inline float eval_monotone(board_t b, board_t t) {
-    float LR = std::max(
+inline score_t eval_monotone(board_t b, board_t t) {
+    score_t LR = std::max(
         apply_score_table(b, my_score_table_L),
         apply_score_table(b, my_score_table_R));
-    float UD = std::max(
+    score_t UD = std::max(
         apply_score_table(t, my_score_table_L),
         apply_score_table(t, my_score_table_R));
     return LR + UD;
@@ -155,7 +168,7 @@ static inline void copy_row_to_col(const uint16_t a[4], uint16_t b[16]) {
   b[12] = a[3];
 }
 
-inline float eval_smoothness(board_t b, board_t t) {
+inline score_t eval_smoothness(board_t b, board_t t) {
   uint16_t diff_LR[16];
   memcpy(diff_LR+0, diff_table[(b >> 0) & ROW_MASK], sizeof(diff_table[0]));
   memcpy(diff_LR+4, diff_table[(b >> 16) & ROW_MASK], sizeof(diff_table[0]));
@@ -170,12 +183,12 @@ inline float eval_smoothness(board_t b, board_t t) {
   int s = 0;
   for (int i = 0; i < 16; i++)
     s += std::min(diff_LR[i], diff_UD[i]);
-  return -s;
+  return SCORE(-s);
 }
 
-float eval(board_t b) {
+score_t eval(board_t b) {
   board_t t = transpose(b);
-  float score = 0;
+  score_t score = 0;
 
   score += blank_score[count_blank(b)];
   score += eval_smoothness(b, t);
@@ -214,7 +227,7 @@ int find_max_tile_ex(board_t b) {
 
 struct local_cache1_value_t {
   board_t b;
-  float s;
+  score_t s;
 };
 
 local_cache1_value_t local_cache1[16 /*max depth*/][/*key*/32][4];
@@ -226,7 +239,7 @@ inline int local_cache1_key(int tileidx, int tilev, int m) {
     return tileidx % 4 + tilev * 4 + m * 8;
 }
 
-inline int local_cache1_get(int depth, int key, board_t b, float* s) {
+inline int local_cache1_get(int depth, int key, board_t b, score_t* s) {
   for (int i = 0; i < 4; i++)
     if (local_cache1[depth][key][i].b == b) {
       *s = local_cache1[depth][key][i].s;
@@ -235,7 +248,7 @@ inline int local_cache1_get(int depth, int key, board_t b, float* s) {
   return false;
 }
 
-inline void local_cache1_set(int depth, int key, int tileidx, int m, board_t b, float s) {
+inline void local_cache1_set(int depth, int key, int tileidx, int m, board_t b, score_t s) {
   if (m < 2) {
     local_cache1[depth][key][tileidx % 4].b = b;
     local_cache1[depth][key][tileidx % 4].s = s;
@@ -245,9 +258,9 @@ inline void local_cache1_set(int depth, int key, int tileidx, int m, board_t b, 
   }
 }
 
-float search_min(board_t b, int depth, float nodep /*, int n2, int n4*/);
-float search_max(board_t b, int depth, int tileidx, int tilev, float nodep /*, int n2, int n4*/) {
-  float best_score = -1e10;
+score_t search_min(board_t b, int depth, float nodep /*, int n2, int n4*/);
+score_t search_max(board_t b, int depth, int tileidx, int tilev, float nodep /*, int n2, int n4*/) {
+  score_t best_score = MIN_SCORE;
   board_t t = transpose(b);
   for (int m = 0; m < 4; m++) {
     board_t b2 = do_move(b, t, m);
@@ -255,7 +268,7 @@ float search_max(board_t b, int depth, int tileidx, int tilev, float nodep /*, i
       continue;
     int key = local_cache1_key(tileidx, tilev, m);
 
-    float s;
+    score_t s;
     if (!local_cache1_get(depth, key, b2, &s)) {
       s = search_min(b2, depth - 1, nodep /*, n2, n4*/);
       local_cache1_set(depth, key, tileidx, m, b2, s);
@@ -270,7 +283,7 @@ float search_max(board_t b, int depth, int tileidx, int tilev, float nodep /*, i
 struct cache1_value_t {
   board_t b;
   float p;
-  float s;
+  score_t s;
 };
 
 // cache1 size: 50%=5643, 99%=21640, 99.9%=29024, max=39907
@@ -280,14 +293,14 @@ inline int cache1_key_hash(board_t b) {
   return murmur3_simplified(b) % CACHE1_KEY_SIZE;
 }
 
-inline void cache1_set(int key, board_t b, int depth, float nodep, float s) {
+inline void cache1_set(int key, board_t b, int depth, float nodep, score_t s) {
   cache1_value_t& value = cache1[key];
   value.b = (b & ~0xff) | depth;
   value.p = nodep;
   value.s = s;
 }
 
-inline bool cache1_get(int key, board_t b, int depth, float nodep, float* s) {
+inline bool cache1_get(int key, board_t b, int depth, float nodep, score_t* s) {
   cache1_value_t& value = cache1[key];
   if ((value.b >> 8) == (b >> 8) &&
     (value.b & 0xff) >= unsigned(depth) &&
@@ -302,20 +315,20 @@ inline bool cache1_get(int key, board_t b, int depth, float nodep, float* s) {
 void cache1_clear() {
 }
 
-float search_min(board_t b, int depth, float nodep /*, int n2, int n4*/) {
+score_t search_min(board_t b, int depth, float nodep /*, int n2, int n4*/) {
 //  if (depth == 0 || (n4 > 0 || n2 > 4))
   if (depth == 0 || nodep < search_threshold)
     return eval(b);
 
   int key = cache1_key_hash(b);
-  float s;
+  score_t s;
   if (cache1_get(key, b, depth, nodep, &s))
     return s;
 
   int blank = count_blank(b);
 
   float nodep2 = nodep / blank;
-  float score = 0;
+  score_t score = 0;
   board_t tile = 1;
   board_t tmp = b;
   int idx = 0;
@@ -324,17 +337,17 @@ float search_min(board_t b, int depth, float nodep /*, int n2, int n4*/) {
   while (tile) {
     if ((tmp & 0xf) == 0) {
       if (with_tile4) {
-        score += search_max(b | tile, depth, idx, 0, nodep2 * 0.9f /*, n2+1, n4*/) * 0.9f;
-        score += search_max(b | tile << 1, depth, idx, 1, nodep2 * 0.1f /*, n2, n4+1*/) * 0.1f;
+        score += search_max(b | tile, depth, idx, 0, nodep2 * 0.9f /*, n2+1, n4*/) * 9;//0.9f;
+        score += search_max(b | tile << 1, depth, idx, 1, nodep2 * 0.1f /*, n2, n4+1*/) * 1;//0.1f;
       } else {
-        score += search_max(b | tile, depth, idx, 0, nodep2 * 0.9f /*, n2+1, n4*/);
+        score += search_max(b | tile, depth, idx, 0, nodep2 * 0.9f /*, n2+1, n4*/) * 10;
       }
     }
     tile <<= 4;
     tmp >>= 4;
     idx++;
   }
-  float result = score / blank;
+  score_t result = score / blank / 10;
   cache1_set(key, b, depth, nodep, result);
   return result;
 }
@@ -423,7 +436,7 @@ bool maybe_dead_maxnode(board_t b, int depth) {
 
 int root_search_move(board_t b) {
   cache1_clear();
-  float best_score = -1e10-1;
+  score_t best_score = MIN_SCORE-1;
   int best_move = 0;
 
   max_tile0 = find_max_tile(b);
@@ -452,7 +465,7 @@ int root_search_move(board_t b) {
 
     int lookahead = max_lookahead;
     //lookahead = max_lookaheads[count_blank(b2)];
-    float s = search_min(b2, lookahead - 1, 1.0 /*, 0, 0*/);
+    score_t s = search_min(b2, lookahead - 1, 1.0 /*, 0, 0*/);
     if (s > best_score) {
       best_score = s;
       best_move = m;
@@ -558,7 +571,7 @@ void build_eval_table() {
   }
   for (int i = 0; i <= 16; i++) {
     int f = 16 - i;
-    blank_score[i] = - ((para_blank_3*f+para_blank_2)*f+para_blank_1)*f;
+    blank_score[i] = SCORE(- ((para_blank_3*f+para_blank_2)*f+para_blank_1)*f);
   }
 
   for (unsigned row = 0; row <= 0xffff; row++) {
@@ -586,8 +599,8 @@ void build_eval_table() {
         }
       }
 
-      my_score_table_L[row] = L;
-      my_score_table_R[row_reverse(row)] = L;
+      my_score_table_L[row] = SCORE(L);
+      my_score_table_R[row_reverse(row)] = SCORE(L);
     }
 #endif
 
