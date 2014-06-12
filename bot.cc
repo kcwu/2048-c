@@ -35,17 +35,17 @@ typedef double score_t;
 #define SCORE(v) (score_t)(v)
 #endif
 
-float para_reverse_weight = 1.5;
-float para_reverse = 2.0;
+float para_reverse_weight = 1.525;
+float para_reverse = 2.247;
 float para_reverse_4 = 1.0;
 float para_reverse_8 = 1.0;
 float para_reverse_12 = 1.0;
 float para_equal = 0.0;
 float para_inc_0 = 0;
 float para_inc_1 = 0;
-float para_inc_2 = 4;
+float para_inc_2 = 3.486;
 float para_inc_3 = 0;
-float para_smooth = 2.0;
+float para_smooth = 1.971;
 float para_smooth_4 = 1.0;
 float para_smooth_8 = 1.0;
 float para_smooth_12 = 1.0;
