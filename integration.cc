@@ -60,7 +60,10 @@ static int find_max_tile(board_t b) {
   return r;
 }
 int effective_max_depth(board_t b) {
-  return std::min(find_max_tile(b) - 2, *max_lookahead_ptr);
+  int m = find_max_tile(b);
+  if (m >= 14 && *max_lookahead_ptr >= 13)
+    return (*max_lookahead_ptr);
+  return std::min(m - 2, *max_lookahead_ptr);
 }
 
 void time_record(int move_count, double t, board_t b) {

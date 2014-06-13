@@ -17,7 +17,7 @@ int max_tile0;
 
 // ---------------------------------------------------------
 // parameters
-int max_lookahead = 12;
+int max_lookahead = 13;
 
 float search_threshold = 0.006f;
 int maybe_dead_threshold = 25;
@@ -467,7 +467,11 @@ int root_search_move(board_t b) {
 
     int lookahead = max_lookahead;
     // adpative search depth limit
-    lookahead = std::min(max_lookahead, std::max(3, count_diff_tile(b)-2));
+    if (find_max_tile(b) >= 14 && max_lookahead >= 13) {
+      lookahead = count_diff_tile(b)-2+(max_lookahead-12);
+    } else
+      lookahead = std::min(max_lookahead, count_diff_tile(b)-2);
+    lookahead = std::max(3, lookahead);
     score_t s = search_min(b2, lookahead - 1, 1.0 /*, 0, 0*/);
     if (s > best_score) {
       best_score = s;
