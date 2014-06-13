@@ -122,6 +122,12 @@ void main_loop() {
 #if defined(REPLAY_MOVES) || defined(LOG_MOVES)
   fclose(log_fp);
 #endif
+
+#if 0
+  extern int64_t min_scores[17];
+  for (int i = 0; i <= 16; i++)
+    printf("min score %d: %ld\n", i, min_scores[i]);
+#endif
 }
 
 int main(int argc, char* argv[]) {

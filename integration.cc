@@ -13,12 +13,12 @@ root_search_move_func_t root_search_move_func;
 max_lookahead_ptr_t max_lookahead_ptr;
 maybe_dead_threshold_ptr_t maybe_dead_threshold_ptr;
 
-int min_xi = 0;
-int init_xi = 2;
-int max_xi = 9;
+int min_xi = 3;
+int init_xi = 8;
+int max_xi = 15;
 bool emergency;
 int xi;
-int xis[] = { 16, 18, 20, 22, 24, 26, 27, 28, 29, 30 };
+int xis[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 int flag_verbose;
 
 board_t convert_grid_to_board(Grid g) {
@@ -48,18 +48,30 @@ double avg_time_for_threshold[100];
 double total_time;
 int total_move;
 double time_limit = 0.01;
-double base_speed[100];
 
-void time_record(int move_count, double t) {
+static int find_max_tile(board_t b) {
+  int r = 0;
+  while (b) {
+    r = std::max(r, (int)(b&0xf));
+    b >>= 4;
+  }
+  return r;
+}
+int effective_max_depth(board_t b) {
+  return std::min(find_max_tile(b) - 2, *max_lookahead_ptr);
+}
+
+void time_record(int move_count, double t, board_t b) {
   total_time += t;
   total_move += move_count;
   if (flag_verbose) {
     printf("move %d, t %f, avg %f\n", move_count, t, t/move_count*1000);
     printf("over all %d, t %f, avg %f\n", total_move, total_time, total_time/total_move*1000);
   }
-  move_count_for_threshold[xi] += move_count;
-  time_for_threshold[xi] += t;
-  avg_time_for_threshold[xi] = time_for_threshold[xi] / move_count_for_threshold[xi];
+  int exi = effective_max_depth(b);
+  move_count_for_threshold[exi] += move_count;
+  time_for_threshold[exi] += t;
+  avg_time_for_threshold[exi] = time_for_threshold[exi] / move_count_for_threshold[exi];
 
   if (flag_verbose) {
     printf("\t");
@@ -77,6 +89,7 @@ void time_control(int n, int idx) {
   if (idx == 0) {
     // use default
     xi = init_xi;
+    *max_lookahead_ptr = xis[xi];
     return;
   }
 
@@ -116,33 +129,10 @@ void time_control(int n, int idx) {
   if (old_xi != xi) {
     if (flag_verbose)
       printf("switch from %d to %d\n", xis[old_xi], xis[xi]);
-    *maybe_dead_threshold_ptr = xis[xi];
+    *max_lookahead_ptr = xis[xi];
   } else {
     if (flag_verbose)
       printf("still use %d\n", xis[xi]);
-  }
-
-  if (base_speed[*max_lookahead_ptr] > 0) {
-    int avg_move = total_move / idx;
-    double base = base_speed[*max_lookahead_ptr];
-    double esti_time = (total_time + base * avg_move * remain);
-    double esti_move = avg_move * n;
-    if (esti_time / esti_move >= time_limit) {
-      if (flag_verbose)
-        printf("warning: too slow. (%.1f+%f*%d*%d) / %d = %f\n",
-            total_time, base, avg_move, remain, avg_move * n,
-            esti_time / esti_move
-
-            );
-      if (n > 10 && remain < 5) {
-        --*max_lookahead_ptr;
-        xi = init_xi;
-        *maybe_dead_threshold_ptr = xis[xi];
-        emergency = true;
-        if (flag_verbose)
-          printf("dec max_lookahead to %d\n", *max_lookahead_ptr);
-      }
-    }
   }
 }
 
@@ -206,9 +196,14 @@ void main_loop(int n) {
 #ifdef PRINT
     myGame.printGrid(35,2);
 #endif
-    if(i < n - 1)  myGame.reset();
     double t2 = now();
-    time_record(move_count, t2-t1);
+    {
+      Grid grid;
+      myGame.getCurrentGrid(grid);
+      board_t b = convert_grid_to_board(grid);
+      time_record(move_count, t2-t1, b);
+    }
+    if(i < n - 1)  myGame.reset();
   }
 }
 
@@ -279,15 +274,15 @@ void init() {
   // init time control
   int n_sample = sizeof(sample_boards)/sizeof(sample_boards[0]);
 
-  int to_lookahead = 4;
-  for (int lookahead = to_lookahead; lookahead <= 8; lookahead++) {
+  // test run loaded code
+  int to_lookahead = 3;
+  for (int lookahead = to_lookahead; lookahead <= 12; lookahead++) {
     double t0 = now();
     *max_lookahead_ptr = lookahead;
     for (int i = 0 ; i < n_sample; i++) {
       root_search_move_func(sample_boards[i]);
     }
     double t1 = now();
-    base_speed[lookahead] = (t1 - t0) / n_sample;
     if (flag_verbose)
       printf("%d %f\n", lookahead, t1-t0);
     if (t1-t0 < 0.9*time_limit * n_sample) {
@@ -296,7 +291,7 @@ void init() {
       break;
     }
   }
-  *max_lookahead_ptr = to_lookahead;
+  //*max_lookahead_ptr = to_lookahead;
 
   signal(SIGSEGV, SIG_DFL);
   signal(SIGBUS, SIG_DFL);
