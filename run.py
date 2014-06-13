@@ -58,12 +58,13 @@ def run(server, exe, arg):
         print 'error', url
         raise
     result = json.loads(r.read())
-    #print result
+    print result
     assert result['done'] == 'ok'
     return result['output'].splitlines()
 
 def func((exe, exe_md5, idx)):
-    cmd = ['./2048', '-s', str(idx+2000)] + extra_args
+    seed_base = int(md5(str(extra_args)+exe_md5)[:6], 16)
+    cmd = ['./2048', '-s', str(idx+seed_base)] + extra_args
 
     #exe = file('2048', 'rb').read()
     #exe_md5 = md5(exe)
@@ -109,28 +110,37 @@ server_lists = [
         'localhost:8765',
         ] + re.findall(r'[^,]+', os.environ.get('SERVER_2048', ''))
 
-def query_servers():
+def query_servers(verbose=True):
     result = []
+    summary = []
     for s in server_lists:
         r = urllib2.urlopen('http://%s/config' % s)
         x = r.read()
         if 5 <= datetime.date.today().weekday() <= 6:
-            print '\tweekend force 30'
+            if verbose:
+                print '\tweekend force 30'
             x = 30
-        print s, int(x)
+        if verbose:
+            print s, int(x)
+        summary.append('%s*%d' % (s, int(x)))
         result += [s] * int(x)
+    #print ' '.join(summary)
     random.shuffle(result)
     return result
 
-def init():
-    for s in query_servers():
+def init(verbose=True):
+    while not free_server.empty():
+        free_server.get()
+    assert free_server.qsize() == 0
+
+    for s in query_servers(verbose):
         free_server.put(s)
     ncpu = free_server.qsize()
     print 'total cpu', ncpu
 
-pool = None
-
 def run_jobs(njob):
+    init(verbose=False)
+
     ncpu = free_server.qsize()
     exe = file('2048', 'rb').read()
     exe_md5 = md5(exe)
@@ -138,10 +148,10 @@ def run_jobs(njob):
     if njob == 1 or ncpu == 1:
         result = map(func, jobs)
     else:
-        global pool
-        if not pool:
-            pool = multiprocessing.dummy.Pool(processes=ncpu)
+        pool = multiprocessing.dummy.Pool(processes=ncpu)
         result = pool.map(func, jobs)
+        pool.close()
+        pool.join()
 
     totaltime = []
     moves = []
