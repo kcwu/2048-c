@@ -143,6 +143,8 @@ void load_code() {
                 'init_bot',
                 'max_lookahead',
                 'maybe_dead_threshold',
+                'search_threshold',
+                'cache1_clear',
                 ):
             symbol = None
             for s in elf.get_section_by_name('.symtab').iter_symbols():

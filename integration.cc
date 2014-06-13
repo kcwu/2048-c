@@ -10,8 +10,10 @@
 
 init_bot_func_t init_bot_func;
 root_search_move_func_t root_search_move_func;
+cache1_clear_func_t cache1_clear_func;
 max_lookahead_ptr_t max_lookahead_ptr;
 maybe_dead_threshold_ptr_t maybe_dead_threshold_ptr;
+search_threshold_ptr_t search_threshold_ptr;
 
 int min_xi = 3;
 int init_xi = 8;
@@ -89,6 +91,8 @@ void time_control(int n, int idx) {
   if (idx == 0) {
     // use default
     xi = init_xi;
+    if (flag_verbose)
+      printf("use %d\n", xis[xi]);
     *max_lookahead_ptr = xis[xi];
     return;
   }
@@ -108,7 +112,7 @@ void time_control(int n, int idx) {
           move_count_for_threshold[i] == 0)
         break;
 
-      bool enough_try = move_count_for_threshold[i] > total_move/idx*3;
+      bool enough_try = move_count_for_threshold[i] > total_move/idx* (idx < 15? 5:3);
       double estimate = total_time/total_move*idx + avg_time_for_threshold[i]  * worst_factor * remain;
 
       if (!enough_try || estimate < time_limit * n)
@@ -161,6 +165,7 @@ void main_loop(int n) {
       Grid grid;
       myGame.getCurrentGrid(grid);
       board_t b = convert_grid_to_board(grid);
+      //print_pretty_board(b);
 
       int m = root_search_move_func(b);
       switch (move_str[m]) {
@@ -246,6 +251,17 @@ void handle_signal(int sig) {
   longjmp(saved_state, 1);
 }
 
+double test_run() {
+  int n_sample = sizeof(sample_boards)/sizeof(sample_boards[0]);
+    double t0 = now();
+    cache1_clear_func();
+    for (int i = 0; i < n_sample; i++) {
+      root_search_move_func(sample_boards[i]);
+    }
+    double t1 = now();
+    return (t1 - t0) / n_sample;
+}
+
 void init() {
   signal(SIGSEGV, handle_signal);
   signal(SIGBUS, handle_signal);
@@ -260,38 +276,63 @@ void init() {
 
   if (max_lookahead_ptr == NULL ||
       init_bot_func == NULL ||
-      root_search_move_func == NULL) {
+      root_search_move_func == NULL ||
+      maybe_dead_threshold_ptr == NULL ||
+      search_threshold_ptr == NULL ||
+      cache1_clear_func == NULL) {
     printf("code not loaded\n");
     max_lookahead_ptr = &max_lookahead;
     init_bot_func = init_bot;
     root_search_move_func = root_search_move;
+    maybe_dead_threshold_ptr = &maybe_dead_threshold;
+    search_threshold_ptr = &search_threshold;
+    cache1_clear_func = &cache1_clear;
   }
   alarm(5);
   init_bot_func();
   alarm(0);
 
 
-  // init time control
-  int n_sample = sizeof(sample_boards)/sizeof(sample_boards[0]);
+  // init time control & test run loaded code
+  *max_lookahead_ptr = 8;
+  float mid = 0.1;
+  float left = mid;
+  float right = mid;
+  double magic = 0.5*time_limit;
+  float to_threshold = mid;
 
-  // test run loaded code
-  int to_lookahead = 3;
-  for (int lookahead = to_lookahead; lookahead <= 12; lookahead++) {
-    double t0 = now();
-    *max_lookahead_ptr = lookahead;
-    for (int i = 0 ; i < n_sample; i++) {
-      root_search_move_func(sample_boards[i]);
-    }
-    double t1 = now();
+  while (1) {
+    *search_threshold_ptr = mid;
+    double t = test_run();
     if (flag_verbose)
-      printf("%d %f\n", lookahead, t1-t0);
-    if (t1-t0 < 0.9*time_limit * n_sample) {
-      to_lookahead = lookahead;
-    } else {
+      printf("threshold=%f, t=%f %c\n", mid, t*1000, t<magic?'*':' ');
+    if (t < magic) {
+      to_threshold = mid;
+      left = mid;
+      right = mid / 2;
+      mid /= 2;
+    } else
       break;
-    }
   }
-  //*max_lookahead_ptr = to_lookahead;
+
+  do {
+    mid = (left+right)/2;
+    *search_threshold_ptr = mid;
+    double t = test_run();
+    if (flag_verbose)
+      printf("threshold=%f, t=%f %c\n", mid, t*1000, t<magic?'*':' ');
+
+    if (t < magic) {
+      left = mid;
+      to_threshold = mid;
+    } else
+      right = mid;
+  } while (left-right > 0.00001);
+
+  *search_threshold_ptr = to_threshold;
+
+  if (flag_verbose)
+    printf("search_threshold=%f\n", mid);
 
   signal(SIGSEGV, SIG_DFL);
   signal(SIGBUS, SIG_DFL);

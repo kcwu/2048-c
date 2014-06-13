@@ -299,6 +299,9 @@ inline bool cache1_get(int key, board_t b, int depth, float nodep, score_t* s) {
 }
 
 void cache1_clear() {
+  for (int i = 0; i < CACHE1_KEY_SIZE; i++)
+    cache1[i].b = 0;
+  //memset(&cache1, 0, sizeof(cache1));
 }
 
 score_t search_min(board_t b, int depth, float nodep /*, int n2, int n4*/) {
@@ -435,7 +438,6 @@ int count_diff_tile(board_t b) {
 }
 
 int root_search_move(board_t b) {
-  cache1_clear();
   score_t best_score = min_scores[max_tile0]-1;
   int best_move = 0;
 
@@ -465,7 +467,7 @@ int root_search_move(board_t b) {
 
     int lookahead = max_lookahead;
     // adpative search depth limit
-    lookahead = std::min(max_lookahead, std::max(3, count_diff_tile(b)-1));
+    lookahead = std::min(max_lookahead, std::max(3, count_diff_tile(b)-2));
     score_t s = search_min(b2, lookahead - 1, 1.0 /*, 0, 0*/);
     if (s > best_score) {
       best_score = s;
