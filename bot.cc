@@ -17,9 +17,9 @@ int max_tile0;
 
 // ---------------------------------------------------------
 // parameters
-int max_lookahead = 13;
+int max_lookahead = 7;
 
-float search_threshold = 0.006f;
+float search_threshold = 0.001f;
 int maybe_dead_threshold = 25;
 
 #if 1
@@ -27,7 +27,7 @@ typedef int64_t score_t;
 // at least 18 for score, 8 for calculation, 10 for fraction?
 #define SCORE_BASE (1ll << 30)
 #define SCORE(v) (score_t)((v) * (SCORE_BASE))
-#define MIN_SCORE SCORE(-(1ll<<23))
+#define MIN_SCORE SCORE(0)
 #else
 typedef double score_t;
 #define SCORE_BASE 1.0
@@ -53,16 +53,17 @@ float para_blank_1 = 0.0;
 float para_blank_2 = 1.0;
 float para_blank_3 = 0.0;
 
+static const float SCORE_LOST_PENALTY = 30000.0f;
+static const float SCORE_MONOTONICITY_WEIGHT = 1.0f;
+static const float SCORE_MERGES_WEIGHT = 10.0f;
+static const float SCORE_EMPTY_WEIGHT = 10.0f;
 
 // ---------------------------------------------------------
 // Functions to implement solver. Must be highly OPTIMIZED
 
 row_t row_left_table[ROW_NUM];
 row_t row_right_table[ROW_NUM];
-score_t my_score_table_L[65536];
-score_t my_score_table_R[65536];
-score_t diff_table[65536][4];
-score_t blank_score[17];
+score_t my_score_table[65536];
 score_t min_scores[17];
 
 inline ALWAYS_INLINE board_t transpose(board_t x) {
@@ -137,48 +138,18 @@ score_t apply_score_table(board_t b, score_t* table) {
     table[(b >> 48) & ROW_MASK];
 }
 
-inline score_t eval_monotone(board_t b, board_t t) {
-    score_t LR = std::max(
-        apply_score_table(b, my_score_table_L),
-        apply_score_table(b, my_score_table_R));
-    score_t UD = std::max(
-        apply_score_table(t, my_score_table_L),
-        apply_score_table(t, my_score_table_R));
-    return LR + UD;
-}
-
-static inline void copy_row_to_col(const score_t a[4], score_t b[16]) {
-  b[0] = a[0];
-  b[4] = a[1];
-  b[8] = a[2];
-  b[12] = a[3];
-}
-
-inline score_t eval_smoothness(board_t b, board_t t) {
-  score_t diff_LR[16];
-  memcpy(diff_LR+0, diff_table[(b >> 0) & ROW_MASK], sizeof(diff_table[0]));
-  memcpy(diff_LR+4, diff_table[(b >> 16) & ROW_MASK], sizeof(diff_table[0]));
-  memcpy(diff_LR+8, diff_table[(b >> 32) & ROW_MASK], sizeof(diff_table[0]));
-  memcpy(diff_LR+12, diff_table[(b >> 48) & ROW_MASK], sizeof(diff_table[0]));
-  score_t diff_UD[16];
-  copy_row_to_col(diff_table[(t >> 0) & ROW_MASK], diff_UD+0);
-  copy_row_to_col(diff_table[(t >> 16) & ROW_MASK], diff_UD+1);
-  copy_row_to_col(diff_table[(t >> 32) & ROW_MASK], diff_UD+2);
-  copy_row_to_col(diff_table[(t >> 48) & ROW_MASK], diff_UD+3);
-
-  score_t s = 0;
-  for (int i = 0; i < 16; i++)
-    s += std::min(diff_LR[i], diff_UD[i]);
-  return -s;
+score_t eval_xificurk(board_t b, board_t t) {
+    return
+        apply_score_table(b, my_score_table) + 
+        apply_score_table(t, my_score_table) +
+        SCORE(SCORE_LOST_PENALTY);
 }
 
 score_t eval(board_t b) {
   board_t t = transpose(b);
   score_t score = 0;
 
-  score += blank_score[count_blank(b)];
-  score += eval_smoothness(b, t);
-  score += eval_monotone(b, t);
+  score += eval_xificurk(b, t);
 
   return score;
 }
@@ -466,12 +437,6 @@ int root_search_move(board_t b) {
       continue;
 
     int lookahead = max_lookahead;
-    // adpative search depth limit
-    if (find_max_tile(b) >= 14 && max_lookahead >= 13) {
-      lookahead = count_diff_tile(b)-2+(max_lookahead-12);
-    } else
-      lookahead = std::min(max_lookahead, count_diff_tile(b)-2);
-    lookahead = std::max(3, lookahead);
     score_t s = search_min(b2, lookahead - 1, 1.0 /*, 0, 0*/);
     if (s > best_score) {
       best_score = s;
@@ -554,33 +519,6 @@ void build_move_table() {
 }
 
 void build_eval_table() {
-  double reverse_penalty[16];
-  for (int i = 0; i < 16; i++) {
-    float v = 0;
-    if (i == 1)
-      v = 2*para_reverse_weight;
-    else if (i > 1)
-      v = reverse_penalty[i-1] * para_reverse;
-    if (i >= 4) v *= para_reverse_4;
-    if (i >= 8) v *= para_reverse_8;
-    if (i >= 12) v *= para_reverse_12;
-    reverse_penalty[i] = v;
-  }
-  double smooth_weight[16] = {0};
-  for (int i = 0; i < 16; i++) {
-    float v = 1;
-    if (i > 0)
-      v = smooth_weight[i-1] * para_smooth;
-    if (i >= 4) v *= para_smooth_4;
-    if (i >= 8) v *= para_smooth_8;
-    if (i >= 12) v *= para_smooth_12;
-    smooth_weight[i] = v;
-  }
-  for (int i = 0; i <= 16; i++) {
-    int f = 16 - i;
-    blank_score[i] = SCORE(- ((para_blank_3*f+para_blank_2)*f+para_blank_1)*f);
-  }
-
   for (unsigned row = 0; row <= 0xffff; row++) {
     unsigned urow[N] = {
       row >> 0 & 0xf,
@@ -591,58 +529,46 @@ void build_eval_table() {
 
 #if 1
     {
-      int L;
-      int m = 0;
-      L = 0;
-      for (int i = 0; i < 3; i++) {
-        if (urow[i] != 0 && urow[i] >= urow[i+1]) {
-          if (urow[i] == urow[i+1])
-            L += para_equal;
-          m++;
-          L += ((para_inc_3*m+para_inc_2)*m+para_inc_1)*m + para_inc_0;
+      int empty = 0;
+      int merges = 0;
+
+      int prev = 0;
+      int counter = 0;
+      for (int i = 0; i < 4; ++i) {
+        int rank = urow[i];
+        if (rank == 0) {
+          empty++;
         } else {
-          L -= abs(reverse_penalty[urow[i]] - reverse_penalty[urow[i+1]]);
-          m = 0;
+          if (prev == rank) {
+            counter++;
+          } else if (counter > 0) {
+            merges += 1 + counter;
+            counter = 0;
+          }
+          prev = rank;
+        }
+      }
+      if (counter > 0) {
+        merges += 1 + counter;
+      }
+
+      int monotonicity_left = 0;
+      int monotonicity_right = 0;
+      for (int i = 1; i < 4; ++i) {
+        if (urow[i-1] > urow[i]) {
+          monotonicity_left += pow(urow[i-1], 3) - pow(urow[i], 3);
+        } else {
+          monotonicity_right += pow(urow[i], 3) - pow(urow[i-1], 3);
         }
       }
 
-      my_score_table_L[row] = SCORE(L);
-      my_score_table_R[row_reverse(row)] = SCORE(L);
+      my_score_table[row] = SCORE(SCORE_EMPTY_WEIGHT * empty + SCORE_MERGES_WEIGHT * merges -
+        SCORE_MONOTONICITY_WEIGHT * std::min(monotonicity_left, monotonicity_right));
     }
 #endif
 
-#if 1
-    {
-      double d[4];
-      double x[4] = {
-        smooth_weight[urow[0]],
-        smooth_weight[urow[1]],
-        smooth_weight[urow[2]],
-        smooth_weight[urow[3]],
-      };
-      d[0] = fabs(x[1]-x[0]);
-      d[1] = std::min(fabs(x[0]-x[1]),fabs(x[2]-x[1]));
-      d[2] = std::min(fabs(x[1]-x[2]),fabs(x[3]-x[2]));
-      d[3] = fabs(x[2]-x[3]);
-      diff_table[row][0] = SCORE(d[0]);
-      diff_table[row][1] = SCORE(d[1]);
-      diff_table[row][2] = SCORE(d[2]);
-      diff_table[row][3] = SCORE(d[3]);
-    }
-#endif
   }
 
-#if 1
-  // FIXME this is dangerous. highly depends on eval function
-  double v = 1;
-  for (int i = 0; i <= 16; i++) {
-    // 4 is buffer
-    min_scores[i] = SCORE(std::min(
-          -10000.0,
-          -v * 8 * 4));
-    v *= para_reverse;
-  }
-#endif
 }
 
 void init_bot() {
