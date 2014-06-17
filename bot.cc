@@ -202,30 +202,6 @@ score_t eval_static(board_t b, board_t t) {
   return score;
 }
 
-score_t eval_reliable(int level, board_t b, board_t t) {
-  score_t s = MIN_SCORE;
-  for (int m = 0; m < 4; m++)
-    if (is_reliable_move(b, t, m)) {
-      board_t b2 = do_move(b, t, m);
-      if (b == b2)
-        continue;
-      board_t t2 = transpose(b2);
-      s = std::max(s, eval_static(b2, t2));
-      s = std::max(s, eval_reliable(level + 1, b2, t2));
-    }
-  return s;
-}
-
-score_t eval(board_t b) {
-  board_t t = transpose(b);
-  score_t s = eval_static(b, t);
-
-  score_t s2 = eval_reliable(0, b, t);
-  s = std::max(s, s2);
-  return s;
-}
-
-
 inline uint64_t rotl64 ( uint64_t x, int8_t r ) {
   return (x << r) | (x >> (64 - r));
 }
@@ -253,6 +229,64 @@ inline int find_max_tile(board_t b) {
 int find_max_tile_ex(board_t b) {
   return find_max_tile(b);
 }
+
+struct cache3_value_t {
+  board_t b;
+  score_t s;
+};
+
+#define CACHE3_KEY_SIZE 65536
+cache3_value_t cache3[CACHE3_KEY_SIZE];
+inline int cache3_key_hash(board_t b) {
+  return murmur3_simplified(b) % CACHE3_KEY_SIZE;
+}
+
+inline void cache3_set(int key, board_t b, score_t s) {
+  cache3_value_t& value = cache3[key];
+  value.b = b;
+  value.s = s;
+}
+
+inline bool cache3_get(int key, board_t b, score_t* s) {
+  cache3_value_t& value = cache3[key];
+  if (value.b == b) {
+    *s = value.s;
+    return true;
+  }
+  return false;
+}
+
+score_t eval_reliable(int level, board_t b, board_t t) {
+  int key = cache3_key_hash(b);
+  score_t s;
+  if (cache3_get(key, b, &s))
+    return s;
+
+  s = MIN_SCORE;
+  for (int m = 0; m < 4; m++)
+    if (is_reliable_move(b, t, m)) {
+      board_t b2 = do_move(b, t, m);
+      if (b == b2)
+        continue;
+      board_t t2 = transpose(b2);
+      s = std::max(s, eval_static(b2, t2));
+      s = std::max(s, eval_reliable(level + 1, b2, t2));
+    }
+
+  cache3_set(key, b, s);
+
+  return s;
+}
+
+score_t eval(board_t b) {
+  board_t t = transpose(b);
+  score_t s = eval_static(b, t);
+
+  score_t s2 = eval_reliable(0, b, t);
+  s = std::max(s, s2);
+  return s;
+}
+
 
 struct local_cache1_value_t {
   board_t b;
