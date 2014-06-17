@@ -59,6 +59,8 @@ float para_blank_3 = 0.0;
 
 row_t row_left_table[ROW_NUM];
 row_t row_right_table[ROW_NUM];
+bool reliable_left_table[ROW_NUM];
+bool reliable_right_table[ROW_NUM];
 score_t my_score_table_L[65536];
 score_t my_score_table_R[65536];
 score_t diff_table[65536][4];
@@ -129,6 +131,24 @@ board_t do_move_ex(board_t b, board_t t, int m)  {
   return do_move(b, t, m);
 }
 
+inline bool is_reliable_moving(board_t b, bool reliable_table[ROW_NUM]) {
+  return
+    reliable_table[b >> 0 & ROW_MASK] &&
+    reliable_table[b >> 16 & ROW_MASK] &&
+    reliable_table[b >> 32 & ROW_MASK] &&
+    reliable_table[b >> 48 & ROW_MASK];
+}
+
+inline bool is_reliable_move(board_t b, board_t t, int m) {
+  switch (m) {
+    case 0: return is_reliable_moving(b, reliable_left_table);
+    case 1: return is_reliable_moving(b, reliable_right_table);
+    case 2: return is_reliable_moving(t, reliable_left_table);
+    case 3: return is_reliable_moving(t, reliable_right_table);
+  }
+  return -1;
+}
+
 score_t apply_score_table(board_t b, score_t* table) {
   return
     table[(b >>  0) & ROW_MASK] +
@@ -172,8 +192,7 @@ inline score_t eval_smoothness(board_t b, board_t t) {
   return -s;
 }
 
-score_t eval(board_t b) {
-  board_t t = transpose(b);
+score_t eval_static(board_t b, board_t t) {
   score_t score = 0;
 
   score += blank_score[count_blank(b)];
@@ -182,6 +201,30 @@ score_t eval(board_t b) {
 
   return score;
 }
+
+score_t eval_reliable(int level, board_t b, board_t t) {
+  score_t s = MIN_SCORE;
+  for (int m = 0; m < 4; m++)
+    if (is_reliable_move(b, t, m)) {
+      board_t b2 = do_move(b, t, m);
+      if (b == b2)
+        continue;
+      board_t t2 = transpose(b2);
+      s = std::max(s, eval_static(b2, t2));
+      s = std::max(s, eval_reliable(level + 1, b2, t2));
+    }
+  return s;
+}
+
+score_t eval(board_t b) {
+  board_t t = transpose(b);
+  score_t s = eval_static(b, t);
+
+  score_t s2 = eval_reliable(0, b, t);
+  s = std::max(s, s2);
+  return s;
+}
+
 
 inline uint64_t rotl64 ( uint64_t x, int8_t r ) {
   return (x << r) | (x >> (64 - r));
@@ -545,6 +588,15 @@ void build_move_table() {
       row >> 8 & 0xf,
       row >> 12 & 0xf,
     };
+
+#if 1
+    bool reliable = true;
+    for (int i = 0; i < 3; i++)
+      if (urow[i] == 0 && urow[i+1] != 0)
+        reliable = false;
+    reliable_left_table[row] = reliable;
+    reliable_right_table[row_reverse(row)] = reliable;
+#endif
 
     row_move_left(urow);
     row_t result = row_pack(urow);
