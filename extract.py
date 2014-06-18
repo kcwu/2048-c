@@ -25,11 +25,11 @@ def main():
 
     print "[II] Elf has %d sections."% elf.num_sections()
 
-    selected_sections = [".text",".data"]
-    for section in elf.iter_sections():
-      if section.name.startswith(".rodata"):
-        selected_sections.append(section.name)
-    selected_sections.append('.bss')
+    selected_sections = []
+    for section_prefix in ['.text', '.data', '.rodata', '.bss']:
+        for section in elf.iter_sections():
+            if section.name.startswith(section_prefix):
+                selected_sections.append(section.name)
 
     offsets = {}
     shellcode = StringIO('')
