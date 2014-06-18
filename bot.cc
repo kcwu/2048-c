@@ -35,7 +35,8 @@ typedef double score_t;
 #define SCORE(v) (score_t)(v)
 #endif
 
-float para_reverse_weight = 1.525;
+float para_reverse_weight = 1.5;
+float para_reverse_weight2 = 4.0;
 float para_reverse = 2.247;
 float para_reverse_4 = 1.0;
 float para_reverse_8 = 1.0;
@@ -62,7 +63,9 @@ row_t row_right_table[ROW_NUM];
 bool reliable_left_table[ROW_NUM];
 bool reliable_right_table[ROW_NUM];
 score_t my_score_table_L[65536];
+score_t my_score_table_L2[65536];
 score_t my_score_table_R[65536];
+score_t my_score_table_R2[65536];
 score_t diff_table[65536][4];
 score_t blank_score[17];
 score_t min_scores[17];
@@ -157,13 +160,21 @@ score_t apply_score_table(board_t b, score_t* table) {
     table[(b >> 48) & ROW_MASK];
 }
 
+score_t apply_score_table(board_t b, score_t* table, score_t* table2) {
+  return
+    table[(b >>  0) & ROW_MASK] +
+    table2[(b >> 16) & ROW_MASK] +
+    table2[(b >> 32) & ROW_MASK] +
+    table[(b >> 48) & ROW_MASK];
+}
+
 inline score_t eval_monotone(board_t b, board_t t) {
     score_t LR = std::max(
-        apply_score_table(b, my_score_table_L),
-        apply_score_table(b, my_score_table_R));
+        apply_score_table(b, my_score_table_L, my_score_table_L2),
+        apply_score_table(b, my_score_table_R, my_score_table_R2));
     score_t UD = std::max(
-        apply_score_table(t, my_score_table_L),
-        apply_score_table(t, my_score_table_R));
+        apply_score_table(t, my_score_table_L, my_score_table_L2),
+        apply_score_table(t, my_score_table_R, my_score_table_R2));
     return LR + UD;
 }
 
@@ -641,6 +652,7 @@ void build_move_table() {
 
 void build_eval_table() {
   double reverse_penalty[16];
+  double reverse_penalty2[16];
   for (int i = 0; i < 16; i++) {
     float v = 0;
     if (i == 1)
@@ -651,6 +663,7 @@ void build_eval_table() {
     if (i >= 8) v *= para_reverse_8;
     if (i >= 12) v *= para_reverse_12;
     reverse_penalty[i] = v;
+    reverse_penalty2[i] = v * para_reverse_weight2 / para_reverse_weight;
   }
   double smooth_weight[16] = {0};
   for (int i = 0; i < 16; i++) {
@@ -677,23 +690,29 @@ void build_eval_table() {
 
 #if 1
     {
-      int L;
+      int L, L2;
       int m = 0;
-      L = 0;
+      L = L2 = 0;
       for (int i = 0; i < 3; i++) {
         if (urow[i] != 0 && urow[i] >= urow[i+1]) {
-          if (urow[i] == urow[i+1])
+          if (urow[i] == urow[i+1]) {
             L += para_equal;
+            L2 += para_equal;
+          }
           m++;
           L += ((para_inc_3*m+para_inc_2)*m+para_inc_1)*m + para_inc_0;
+          L2 += ((para_inc_3*m+para_inc_2)*m+para_inc_1)*m + para_inc_0;
         } else {
           L -= abs(reverse_penalty[urow[i]] - reverse_penalty[urow[i+1]]);
+          L2 -= abs(reverse_penalty2[urow[i]] - reverse_penalty2[urow[i+1]]);
           m = 0;
         }
       }
 
       my_score_table_L[row] = SCORE(L);
+      my_score_table_L2[row] = SCORE(L2);
       my_score_table_R[row_reverse(row)] = SCORE(L);
+      my_score_table_R2[row_reverse(row)] = SCORE(L2);
     }
 #endif
 
