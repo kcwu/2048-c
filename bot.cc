@@ -17,7 +17,7 @@ int max_tile0;
 
 // ---------------------------------------------------------
 // parameters
-int max_lookahead = 7;
+int max_lookahead = 8;
 
 float search_threshold = 0.001f;
 int maybe_dead_threshold = 25;
