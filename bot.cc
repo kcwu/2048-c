@@ -53,10 +53,13 @@ float para_blank_1 = 0.0;
 float para_blank_2 = 1.0;
 float para_blank_3 = 0.0;
 
-static const float SCORE_LOST_PENALTY = 30000.0f;
-static const float SCORE_MONOTONICITY_WEIGHT = 1.0f;
-static const float SCORE_MERGES_WEIGHT = 10.0f;
-static const float SCORE_EMPTY_WEIGHT = 10.0f;
+static const float SCORE_LOST_PENALTY = 200000.0f;
+static const float SCORE_MONOTONICITY_POWER = 4.0f;
+static const float SCORE_MONOTONICITY_WEIGHT = 47.0f;
+static const float SCORE_SUM_POWER = 3.5f;
+static const float SCORE_SUM_WEIGHT = 11.0f;
+static const float SCORE_MERGES_WEIGHT = 700.0f;
+static const float SCORE_EMPTY_WEIGHT = 270.0f;
 
 // ---------------------------------------------------------
 // Functions to implement solver. Must be highly OPTIMIZED
@@ -529,6 +532,7 @@ void build_eval_table() {
 
 #if 1
     {
+      float sum = 0;
       int empty = 0;
       int merges = 0;
 
@@ -536,6 +540,7 @@ void build_eval_table() {
       int counter = 0;
       for (int i = 0; i < 4; ++i) {
         int rank = urow[i];
+        sum += pow(rank, SCORE_SUM_POWER);
         if (rank == 0) {
           empty++;
         } else {
@@ -552,18 +557,22 @@ void build_eval_table() {
         merges += 1 + counter;
       }
 
-      int monotonicity_left = 0;
-      int monotonicity_right = 0;
+      float monotonicity_left = 0;
+      float monotonicity_right = 0;
       for (int i = 1; i < 4; ++i) {
         if (urow[i-1] > urow[i]) {
-          monotonicity_left += pow(urow[i-1], 3) - pow(urow[i], 3);
+          monotonicity_left += pow(urow[i-1], SCORE_MONOTONICITY_POWER) - pow(urow[i], SCORE_MONOTONICITY_POWER);
         } else {
-          monotonicity_right += pow(urow[i], 3) - pow(urow[i-1], 3);
+          monotonicity_right += pow(urow[i], SCORE_MONOTONICITY_POWER) - pow(urow[i-1], SCORE_MONOTONICITY_POWER);
         }
       }
 
-      my_score_table[row] = SCORE(SCORE_EMPTY_WEIGHT * empty + SCORE_MERGES_WEIGHT * merges -
-        SCORE_MONOTONICITY_WEIGHT * std::min(monotonicity_left, monotonicity_right));
+      my_score_table[row] = SCORE_LOST_PENALTY +
+        SCORE_EMPTY_WEIGHT * empty +
+        SCORE_MERGES_WEIGHT * merges -
+        SCORE_MONOTONICITY_WEIGHT * std::min(monotonicity_left, monotonicity_right) -
+        SCORE_SUM_WEIGHT * sum;
+
     }
 #endif
 
